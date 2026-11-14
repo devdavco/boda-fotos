@@ -77,13 +77,18 @@ no venza mientras espera.
     "nombreArchivo": "IMG_2041.MOV",
     "tipoContenido": "video/quicktime",
     "tamano": 312475648,
-    "conMiniatura": true
+    "conMiniatura": true,
+    "tamanoMiniatura": 48210
   }
 ```
 
 - `tipoContenido` es opcional: el backend decide por la extensión y rechaza si el tipo enviado
   contradice la extensión.
 - `conMiniatura`: el navegador logró generar una miniatura y la subirá.
+- `tamanoMiniatura`: bytes de esa miniatura (de 1 a 1.048.576). La URL de la miniatura firma ese
+  tamaño, igual que la del archivo, así que hay que enviarlo junto con `conMiniatura`; si falta o
+  está fuera de rango, la respuesta no trae `urlMiniatura` y el archivo se sube sin miniatura (nunca
+  se rechaza por la miniatura).
 
 Respuesta en modo simple (< 100 MB, o cualquier foto):
 
@@ -113,7 +118,7 @@ Respuesta en modo multipart (video ≥ 100 MB):
 
 - El navegador hace `PUT` a `url` con exactamente los `encabezados` indicados y el archivo como
   cuerpo. La miniatura va con `PUT` a `urlMiniatura` y `Content-Type: image/jpeg`.
-- `urlMiniatura` solo viene si `conMiniatura` es `true`.
+- `urlMiniatura` solo viene si `conMiniatura` es `true` y `tamanoMiniatura` es válido.
 - Errores: `NOMBRE_INVALIDO`, `TIPO_NO_PERMITIDO`, `ARCHIVO_VACIO`, `ARCHIVO_MUY_GRANDE`,
   `TOPE_SESION`, `RECEPCION_NO_INICIADA`, `RECEPCION_CERRADA`, `SESION_INVALIDA`.
 

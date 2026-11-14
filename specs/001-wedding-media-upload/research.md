@@ -130,7 +130,8 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     miniatura (FR-026a).
   - Foto: `createImageBitmap` + `<canvas>`, mismo tiempo máximo y misma regla de fallo.
   - La miniatura sube con su propia URL prefirmada (`image/jpeg`, máximo 1 MB) después del
-    original. No cuenta para el tope de 300 archivos; sus bytes no se suman al tope de 5 GB.
+    original. Como las URLs firman el tamaño (R2), el navegador genera la miniatura **antes** de
+    autorizar y envía su tamaño en `tamanoMiniatura`. No cuenta para el tope de 300 archivos; sus bytes no se suman al tope de 5 GB.
 - **Rationale**: la spec (FR-026 y la suposición "la única miniatura derivada es la del video")
   implica que la galería muestre las fotos con el **original** como miniatura. Una foto de celular
   pesa 3–8 MB; un bloque de 24 miniaturas serían 70–190 MB, incompatible con SC-007 ("cada bloque
