@@ -1,0 +1,10 @@
+<main>
+  <h1>Fotos de la boda de Mara y Daniel</h1>
+  @if (estado(); as valor) {
+    <p>Estado de la recepción: {{ valor }}</p>
+  } @else if (error(); as mensaje) {
+    <p>{{ mensaje }}</p>
+  } @else {
+    <p>Consultando el estado…</p>
+  }
+</main>

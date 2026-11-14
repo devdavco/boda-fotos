@@ -1,0 +1,43 @@
+# Monorepo de AWS Amplify Hosting: cada app de Amplify elige su bloque con la variable
+# AMPLIFY_MONOREPO_APP_ROOT (front-invitados o front-novios). Ambas se conectan a la rama
+# david/release y se construyen con Node 22 (research R12).
+version: 1
+applications:
+  - appRoot: front-invitados
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - nvm install 22
+            - nvm use 22
+            - node --version
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist/front-invitados/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: front-novios
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - nvm install 22
+            - nvm use 22
+            - node --version
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist/front-novios/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
