@@ -53,6 +53,24 @@ export function borrarGuardado(clave: string): void {
   }
 }
 
+let sesionEnMemoria: string | null = null;
+
+/** Sesión de subida vigente: la de esta página si se creó aquí, si no la guardada. */
+export function leerSesionId(): string | null {
+  return sesionEnMemoria ?? leerGuardado(CLAVE_SESION_ID);
+}
+
+/** Se mantiene también en memoria para que la subida funcione si `localStorage` no deja escribir. */
+export function guardarSesionId(sesionId: string): void {
+  sesionEnMemoria = sesionId;
+  guardar(CLAVE_SESION_ID, sesionId);
+}
+
+export function borrarSesionId(): void {
+  sesionEnMemoria = null;
+  borrarGuardado(CLAVE_SESION_ID);
+}
+
 /**
  * Error del API: `mensaje` está en español y se muestra tal cual al usuario (Principio VI).
  * `codigo` es el del contrato (`SESION_INVALIDA`, `TOPE_SESION`...) o uno local (`SIN_CONEXION`).
@@ -97,13 +115,13 @@ function esLlamadaDeSubida(req: HttpRequest<unknown>): boolean {
 }
 
 /**
- * Agrega `X-Sesion-Subida` a las llamadas de subida (la sesión se lee de `localStorage` en cada
- * petición, así una sesión renovada por `SESION_INVALIDA` se usa de inmediato) y convierte los
- * errores `{codigo, mensaje}` en `ApiError`.
+ * Agrega `X-Sesion-Subida` a las llamadas de subida y convierte los errores `{codigo, mensaje}` en
+ * `ApiError`. La sesión se lee en cada petición, así que una sesión renovada tras `SESION_INVALIDA`
+ * se usa de inmediato.
  */
 export const apiInterceptor: HttpInterceptorFn = (req, next) => {
   if (!req.url.startsWith('/api/')) return next(req);
-  const sesionId = esLlamadaDeSubida(req) ? leerGuardado(CLAVE_SESION_ID) : null;
+  const sesionId = esLlamadaDeSubida(req) ? leerSesionId() : null;
   const peticion = sesionId ? req.clone({ setHeaders: { [ENCABEZADO_SESION]: sesionId } }) : req;
   return next(peticion).pipe(catchError((error) => throwError(() => aApiError(error))));
 };
