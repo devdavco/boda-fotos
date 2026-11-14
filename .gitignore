@@ -1,0 +1,6 @@
+backend/target/
+node_modules/
+dist/
+.angular/
+.DS_Store
+*.log
