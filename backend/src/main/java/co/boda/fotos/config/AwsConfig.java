@@ -1,5 +1,7 @@
 package co.boda.fotos.config;
 
+import java.net.URI;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,9 +23,18 @@ public class AwsConfig {
         return S3Client.builder().region(Region.of(propiedades.awsRegion())).build();
     }
 
+    /**
+     * Para {@code us-east-1} el SDK firmaría contra el endpoint global ({@code
+     * bucket.s3.amazonaws.com}). Se fuerza el endpoint regional ({@code
+     * bucket.s3.us-east-1.amazonaws.com}), que es el que usó el spike de R2 y el que define
+     * research.md.
+     */
     @Bean
     S3Presigner s3Presigner(BodaProperties propiedades) {
-        return S3Presigner.builder().region(Region.of(propiedades.awsRegion())).build();
+        return S3Presigner.builder()
+                .region(Region.of(propiedades.awsRegion()))
+                .endpointOverride(URI.create("https://s3." + propiedades.awsRegion() + ".amazonaws.com"))
+                .build();
     }
 
     @Bean

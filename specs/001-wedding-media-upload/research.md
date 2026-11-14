@@ -89,10 +89,16 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     que no se puede subir más de lo autorizado con una URL válida. La verificación con
     `HeadObject` al completar se mantiene como segunda barrera. El navegador no necesita enviar
     nada especial: calcula `Content-Length` a partir del archivo.
-  - **Por confirmar al implementar `AlmacenamientoS3` (T040)**: el spike usó el firmador de
-    `boto3`. Hay que repetir la comprobación con `S3Presigner` del AWS SDK for Java v2 (que el
-    `PutObjectRequest` con `contentLength` lo firme y que `signedHeaders()` lo incluya). En
-    multipart se haría igual por parte (10 MiB; la última, el resto); también por confirmar.
+  - **Confirmado con `S3Presigner` del AWS SDK for Java v2 (T040, 2026-11-14)**: el spike usó
+    `boto3`; con el SDK de Java, el `PutObjectRequest` con `contentLength` y `contentType` produce
+    `X-Amz-SignedHeaders=content-length;content-type;host`, y el `UploadPartRequest` con
+    `contentLength`, `content-length;host`. Es decir, el tamaño queda firmado igual que en el spike,
+    también por parte (10 MiB; la última, el resto). La prueba se hizo sin llamar a AWS, solo
+    generando URLs con credenciales falsas.
+  - **Endpoint regional**: para `us-east-1` el presigner del SDK usa por defecto el endpoint global
+    (`bucket.s3.amazonaws.com`). `AwsConfig` fuerza el regional con `endpointOverride`
+    (`https://s3.us-east-1.amazonaws.com`), que da `bucket.s3.us-east-1.amazonaws.com`, el mismo
+    del spike.
   - **Consecuencia para el reintento**: un 403 en un `PUT` ahora puede ser URL vencida **o** tamaño
     distinto del firmado. El front reintenta con una URL nueva **una sola vez** por archivo o
     parte; si vuelve a dar 403, lo marca como fallido en vez de repetir en bucle.
