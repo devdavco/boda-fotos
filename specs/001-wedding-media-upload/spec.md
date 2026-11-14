@@ -11,6 +11,25 @@ Daniel (21 de noviembre de 2026, Cali) escanean un QR, indican su nombre y suben
 el celular a un almacenamiento privado; los novios consultan, descargan y administran el material
 desde un front-end privado y separado.
 
+## Clarifications
+
+### Session 2026-11-13
+
+- Q: ¿Cómo deben verse en la galería las fotos HEIC y los videos? → A: Opción C — miniatura real
+  para JPG/PNG/WEBP; para videos, el celular del invitado genera una miniatura (un fotograma) antes
+  de subir, sin procesamiento en el servidor; HEIC (y videos sin miniatura) se muestran con ícono de
+  tipo y siempre se pueden descargar.
+- Q: ¿Debe haber un límite de cuánto puede subir una sola persona? → A: Opción B — límite por
+  sesión de subida de 300 archivos o 5 GB (lo que ocurra primero), aplicado por el servidor.
+- Q: ¿Qué cuenta como una sesión de subida? → A: Opción B — la sesión se recuerda en el navegador
+  del celular hasta el cierre de la recepción; el nombre aparece prellenado y puede cambiarse, y el
+  tope es acumulado para esa sesión.
+- Q: ¿Cómo se detecta que el sistema dejó de recibir fotos durante la boda? → A: Opción C — alerta
+  automática por correo a un responsable técnico si el servicio no responde o aumentan los errores
+  al autorizar subidas, más un contador de archivos recibidos visible en la galería de los novios.
+- Q: ¿Los novios necesitan filtrar o buscar en la galería? → A: Opción A — sin filtros ni búsqueda;
+  cuadrícula ordenada del más reciente al más antiguo con carga progresiva.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Invitado sube fotos y videos desde el QR (Priority: P1)
@@ -153,13 +172,22 @@ muestra ni permite descargar el material.
 - Subidas en partes que nunca se completan: el sistema las limpia automáticamente para no dejar
   almacenamiento residual.
 - Archivo con extensión permitida pero tamaño 0 o contenido declarado inconsistente: se rechaza.
-- Foto HEIC o video que el navegador de los novios no puede previsualizar: la galería muestra un
-  indicador de tipo de archivo en lugar de una miniatura rota y permite descargarlo igualmente.
+- Foto HEIC, o video cuya miniatura no pudo generarse en el celular del invitado: la galería
+  muestra un ícono de tipo de archivo en lugar de una miniatura rota y permite descargarlo
+  igualmente.
+- La generación de la miniatura de un video falla o el navegador no la soporta: el video se sube
+  de todas formas, sin miniatura; nunca se bloquea la subida por la miniatura.
 - El invitado deja la página abierta desde antes del cierre e intenta subir después: el sistema lo
   rechaza e informa que la recepción cerró.
 - Nombre del invitado vacío, solo espacios o excesivamente largo: se pide un nombre válido (1 a 60
   caracteres).
 - Muchos invitados suben al mismo tiempo durante la fiesta: el sistema sigue aceptando subidas.
+- Un invitado alcanza el tope de su sesión (300 archivos o 5 GB): los archivos ya autorizados
+  terminan normalmente; los siguientes se rechazan con un mensaje que explica el límite.
+- El invitado borra los datos del navegador, usa modo incógnito o cambia de navegador: se crea una
+  sesión nueva y se le pide el nombre otra vez; se acepta.
+- Varias personas usan el mismo celular: cambian el nombre antes de subir; los archivos quedan
+  asociados al nombre vigente, aunque compartan sesión y tope.
 - El nombre original del archivo contiene caracteres especiales o emojis: se conserva como dato
   informativo sin afectar el almacenamiento.
 - Un novio elimina un archivo mientras el otro lo está viendo: la descarga posterior falla con un
@@ -176,8 +204,13 @@ muestra ni permite descargar el material.
 - **FR-002**: La página de invitados MUST estar en español, ser responsiva y diseñada primero para
   celular, y funcionar en versiones recientes de Chrome, Safari (iOS) y Samsung Internet.
 - **FR-003**: La página MUST mostrar un aviso sobre el uso de las fotos antes de subir.
-- **FR-004**: El invitado MUST indicar su nombre (1 a 60 caracteres) antes de subir; el nombre se
-  asocia a todos los archivos de esa sesión de subida y se trata como dato declarado, no verificado.
+- **FR-004**: El invitado MUST indicar su nombre (1 a 60 caracteres) antes de subir; el nombre
+  vigente al momento de subir se asocia a cada archivo y se trata como dato declarado, no
+  verificado.
+- **FR-004a**: La sesión de subida MUST recordarse en el navegador del celular hasta el cierre de
+  la recepción: al volver a abrir el QR o recargar la página, el nombre aparece prellenado, el
+  invitado puede cambiarlo y los topes de FR-012a siguen acumulando sobre la misma sesión. El
+  servidor MUST identificar la sesión con un identificador emitido por él (no adivinable).
 - **FR-005**: El invitado MUST poder seleccionar varios archivos a la vez desde la galería del
   celular o capturarlos en el momento, según lo permita su navegador y dispositivo.
 - **FR-006**: El sistema MUST mostrar el progreso de cada archivo y confirmar individualmente cuáles
@@ -196,6 +229,10 @@ muestra ni permite descargar el material.
 - **FR-011**: El sistema MUST rechazar fotos de más de 40 MB y videos de más de 500 MB.
 - **FR-012**: El sistema MUST validar tipo y tamaño del lado del servidor antes de autorizar cada
   subida; la validación en la página es solo una ayuda para el invitado.
+- **FR-012a**: El servidor MUST limitar cada sesión de subida a un máximo de 300 archivos o 5 GB
+  en total (lo que ocurra primero), contando los archivos autorizados en esa sesión. Al alcanzar el
+  tope, MUST NOT emitir más autorizaciones para esa sesión y la página MUST mostrar un mensaje claro
+  en español. Ambos valores MUST ser configurables sin modificar el código.
 
 **Ventana de recepción**
 
@@ -231,6 +268,14 @@ muestra ni permite descargar el material.
   incorrectos y MUST bloquear temporalmente tras 5 intentos fallidos consecutivos durante 15 minutos.
 - **FR-026**: La galería MUST mostrar en cuadrícula miniaturas de las fotos y videos recibidos, con
   fecha de subida y nombre declarado del invitado, ordenados del más reciente al más antiguo.
+  Las fotos JPG, PNG y WEBP muestran miniatura real; los videos muestran la miniatura generada en
+  el celular del invitado si existe; las fotos HEIC y los videos sin miniatura muestran un ícono de
+  tipo de archivo. No hay procesamiento de archivos en el servidor después de la subida. La
+  cuadrícula MUST cargar de forma progresiva (por bloques al hacer scroll o por páginas) y MUST NOT
+  ofrecer filtros ni búsqueda en la fase 1.
+- **FR-026a**: Al subir un video, la página de invitados MUST intentar generar en el celular una
+  miniatura (un fotograma, imagen pequeña) y subirla junto al video; si no lo logra, el video se
+  sube sin miniatura.
 - **FR-027**: Los novios MUST poder abrir cada archivo en tamaño completo (o reproducir el video) y
   descargar el original individualmente.
 - **FR-028**: Los novios MUST poder eliminar fotos y videos, con confirmación previa.
@@ -242,6 +287,16 @@ muestra ni permite descargar el material.
   Daniel), creadas mediante un procedimiento técnico controlado (no hay registro desde la
   interfaz). El restablecimiento de una contraseña perdida MUST hacerse manualmente con ese mismo
   procedimiento técnico; no hay flujo de autoservicio ni envío de correos en la fase 1.
+
+**Monitoreo**
+
+- **FR-030a**: El sistema MUST enviar una alerta por correo a un responsable técnico designado
+  (configurable, distinto de los novios) cuando el servicio deje de responder a las verificaciones
+  de salud durante más de 5 minutos o cuando las solicitudes de autorización de subida fallen con
+  error del servidor en más del 5% durante 5 minutos. MUST avisar también cuando el problema se
+  resuelva.
+- **FR-030b**: La galería de los novios MUST mostrar un contador de archivos recibidos (total,
+  fotos y videos) y la hora de la última subida completada.
 
 **Disponibilidad y retención**
 
@@ -256,18 +311,22 @@ muestra ni permite descargar el material.
 **Fuera de alcance (fase 1)**
 
 - **FR-034**: La fase 1 MUST NOT incluir cuentas de invitados, comentarios o likes, edición o filtros,
-  reconocimiento facial, publicación en redes sociales ni descarga masiva en ZIP.
+  reconocimiento facial, publicación en redes sociales, descarga masiva en ZIP ni filtros o
+  búsqueda en la galería.
 
 ### Key Entities
 
 - **Evento**: la boda; tiene identificador, nombre, fecha, inicio y cierre de la ventana de
   recepción, indicador de cierre anticipado (con fecha/hora y quién lo cerró) y fecha de fin de
   disponibilidad.
-- **Sesión de subida**: conjunto de archivos enviados por un invitado en una visita; tiene el nombre
-  declarado del invitado y la fecha de inicio.
+- **Sesión de subida**: conjunto de archivos enviados desde un mismo navegador de celular durante la
+  ventana de recepción; tiene identificador emitido por el servidor, el último nombre declarado, la
+  fecha de inicio y los contadores de archivos y bytes autorizados
+  (para aplicar el tope de FR-012a).
 - **Archivo multimedia**: foto o video del evento; tiene identificador del sistema, nombre original,
-  tipo, tamaño, fecha/hora de subida, estado (en progreso, completado, eliminado), sesión de subida
-  asociada y miniatura cuando exista.
+  tipo, tamaño, fecha/hora de subida, nombre declarado del invitado vigente al subirlo, estado
+  (en progreso, completado, eliminado), sesión de subida asociada y miniatura cuando exista (solo
+  videos, generada en el celular del invitado).
 - **Usuario administrador**: novio con acceso al front-end privado; tiene nombre de usuario, hash de
   contraseña, contador de intentos fallidos y bloqueo temporal.
 
@@ -287,12 +346,15 @@ muestra ni permite descargar el material.
   un cierre anticipado.
 - **SC-006**: Cero archivos accesibles sin autorización (verificado intentando abrir archivos sin
   sesión).
-- **SC-007**: Los novios encuentran, abren y descargan cualquier archivo en menos de 30 segundos
-  desde que inician sesión.
+- **SC-007**: Los novios abren y descargan cualquiera de los archivos más recientes en menos de
+  30 segundos desde que inician sesión, y cada bloque adicional de miniaturas aparece en menos de
+  3 segundos al hacer scroll en red 4G o wifi.
 - **SC-008**: El 100% de la lista de chequeo manual (constitución) se completa en producción antes
   del 19 de noviembre de 2026.
 - **SC-009**: Un mes después del evento no quedan cargos residuales por subidas incompletas ni por
   infraestructura sin usar.
+- **SC-010**: Ante una caída del servicio durante la ventana de recepción, el responsable técnico
+  recibe la alerta en menos de 10 minutos.
 
 ## Assumptions
 
@@ -305,12 +367,14 @@ muestra ni permite descargar el material.
 - Una transferencia ya iniciada antes del cierre puede continuar brevemente; no se exige bloquear
   escrituras al minuto exacto más allá de rechazar la finalización de subidas en partes.
 - Los invitados no ven la galería ni los archivos de otros invitados; solo los novios la consultan.
-- Las miniaturas de formatos que el navegador no puede previsualizar (p. ej. HEIC, algunos videos)
-  pueden reemplazarse por un indicador de tipo de archivo sin bloquear la descarga.
+- No se convierten HEIC ni se procesan videos en el servidor; la única miniatura derivada es la
+  del video, generada en el celular del invitado.
 - La eliminación por parte de los novios es definitiva (no hay papelera).
 - La eliminación automática del 2 de diciembre puede completarse en el transcurso de ese día
   (no al minuto exacto), lo cual es aceptable para los novios.
 - Los novios deben ser avisados en la galería (p. ej. un banner) de la fecha límite de descarga.
+- El tope por sesión frena el abuso casual, no a un atacante decidido que abra sesiones nuevas;
+  sin cuentas de invitado esto se acepta para la fase 1.
 - Volumen esperado: del orden de 100–300 invitados y de 2.000 a 5.000 archivos en total.
 - Los parámetros de bloqueo del login (5 intentos, 15 minutos) y de inactividad de sesión (8 horas)
   son valores por defecto razonables, ajustables en el plan.
