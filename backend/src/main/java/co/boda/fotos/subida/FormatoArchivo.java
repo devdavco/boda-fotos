@@ -84,6 +84,16 @@ public enum FormatoArchivo {
         throw new ApiException(CodigoError.TIPO_NO_PERMITIDO);
     }
 
+    /** Formato a partir del valor guardado en el atributo {@code formato} (jpg, png, heic, ...). */
+    public static FormatoArchivo porClave(String clave) {
+        for (FormatoArchivo formato : values()) {
+            if (formato.clave.equals(clave)) {
+                return formato;
+            }
+        }
+        throw new IllegalArgumentException("Formato desconocido: " + clave);
+    }
+
     /**
      * Un tipo de contenido ausente o vacío es válido (Android a veces no lo informa para HEIC y MOV).
      *
