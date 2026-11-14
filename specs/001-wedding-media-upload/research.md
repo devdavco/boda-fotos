@@ -206,6 +206,11 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   `MinHealthyPercentage=100` y `MaxHealthyPercentage=200` (levanta la nueva antes de apagar la
   vieja, sin corte). Volver atrás = restaurar la versión anterior del objeto en S3 y repetir el
   instance refresh.
+- **Orden de creación**: bucket de artefactos → política IAM → `.jar` mínimo con
+  `/actuator/health` subido → launch template v3 → ASG. La user data usa `set -euo pipefail`, así
+  que si `backend/app.jar` no existe el `aws s3 cp` falla, `boda.service` no se crea, el health
+  check nunca pasa y el ASG reemplaza la instancia una y otra vez. Por eso el ASG se crea solo
+  después de subir el `.jar`.
 - **Rationale**: es la opción con menos piezas que funciona con Auto Scaling: nada que instalar
   aparte de Corretto, sin agentes ni registros de imágenes. El versionado del bucket da el
   rollback gratis.
@@ -268,15 +273,19 @@ systemctl enable --now boda
 
 - **Decision**: dos proyectos Angular 21 independientes, `front-invitados/` y `front-novios/`, cada
   uno con su `package.json`. Un `amplify.yml` en la raíz con `applications:` y `appRoot` por app;
-  cada app de Amplify tiene la variable `AMPLIFY_MONOREPO_APP_ROOT`. Solo se conecta la rama
-  `main`. En `preBuild` se fija Node 22 (`nvm use 22`), que cumple el mínimo de Angular 21. Se
+  cada app de Amplify tiene la variable `AMPLIFY_MONOREPO_APP_ROOT`. Las dos apps se conectan a
+  la rama **`david/release`**, no a `main`: se trabaja en ramas `david/...` y se hace merge a
+  `david/release` solo cuando algo está listo; del 19 al 22 solo entran correcciones críticas. El
+  subdominio de Amplify sale del nombre de la rama (`/` pasa a `-`), por lo que la rama no se
+  renombra después de imprimir el QR (plan, K6). En `preBuild` se fija Node 22 (`nvm use 22`), que cumple el mínimo de Angular 21. Se
   publica `dist/<app>/browser`. Sin librerías de UI: CSS propio, móvil primero.
 - **Rewrites, en este orden**:
   1. `/api/<*>` → `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` (200).
   2. `</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>` →
      `/index.html` (200).
 - **Rationale**: dos apps separadas cumplen "no comparten despliegue ni rutas públicas". Duplicar
-  un cliente HTTP pequeño cuesta menos que mantener un workspace compartido.
+  un cliente HTTP pequeño cuesta menos que mantener un workspace compartido. Una rama de
+  publicación dedicada evita que un push a medio hacer llegue a producción, sin pipeline extra.
 - **Alternatives considered**: un workspace Angular con dos proyectos y una librería común; más
   configuración para muy poco código compartido. Descartado.
 - **Desarrollo local**: `ng serve` con `proxy.conf.json` (`/api` → `http://localhost:8080`). El

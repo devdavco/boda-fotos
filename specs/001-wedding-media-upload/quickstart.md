@@ -58,8 +58,14 @@ aws autoscaling start-instance-refresh --auto-scaling-group-name boda-backend-as
 Resultado esperado: en menos de 10 minutos el target group `boda-backend-tg` tiene 1 instancia
 *healthy* y `curl -s https://ddl2si3h6lu7z.cloudfront.net/api/recepcion/estado` responde JSON.
 
-**Front-ends**: `git push` a `main`. Amplify construye y publica las dos apps. Comprobar en cada
-dominio de Amplify que `/api/recepcion/estado` responde el mismo JSON (esto valida el rewrite).
+**Front-ends**: merge a `david/release` y `git push` de esa rama; el trabajo diario va en ramas
+`david/...` y solo se mergea lo que está listo. Amplify construye y publica las dos apps desde
+`david/release`. Comprobar en cada dominio de Amplify que `/api/recepcion/estado` responde el mismo
+JSON (esto valida el rewrite).
+
+**Primera vez** (orden del plan, "Recursos AWS"): crear la rama `david/release` con `amplify.yml` y
+el esqueleto de `front-invitados` antes de conectar Amplify, y subir el `.jar` mínimo al bucket de
+artefactos antes de crear el ASG.
 
 ## 4. Lista de chequeo manual en producción (constitución)
 
@@ -163,11 +169,11 @@ se abre la ventana a mano y después se restaura.
 
 ## 5. Durante y después del evento
 
-- **Congelamiento** del 2026-11-19 al 2026-11-22: no hacer push a `main` salvo correcciones que
-  impidan subir o consultar (Amplify despliega en cada push).
+- **Congelamiento** del 2026-11-19 al 2026-11-22: no hacer merge a `david/release` salvo
+  correcciones que impidan subir o consultar (Amplify despliega en cada push a esa rama).
 - **Front de novios durante el congelamiento** (excepción aprobada; ver plan, "Complexity
-  Tracking"): si no quedó publicado el 18, desactivar el *auto build* de `main` en `boda-invitados`,
-  publicar `front-novios` antes del 2026-11-22 a las 12:00 y repetir §4.5 y §4.6 desde la interfaz.
+  Tracking"): si no quedó publicado el 18, desactivar el *auto build* de `david/release` en `boda-invitados`,
+  mergear `front-novios` a `david/release` antes del 2026-11-22 a las 12:00 y repetir §4.5 y §4.6 desde la interfaz.
   Mientras tanto, el cierre anticipado se hace a mano en el ítem `boda-2026` (`cierreAnticipadoEn`
   en UTC y `cierreAnticipadoPor`).
 - **Huérfanos** (después del cierre del 22): buscar en `boda-fotos` los ítems `PENDIENTE` de modo

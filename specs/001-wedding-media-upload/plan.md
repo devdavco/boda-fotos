@@ -170,14 +170,20 @@ modificaciones de recursos existentes.
 | 4 ✱ | GSI en `boda-fotos` | `galeria-index` | PK `galeriaEvento` (S), SK `galeriaOrden` (S), proyección *All*. Activar también PITR en la tabla (ya estaba pendiente). |
 | 5 | Bucket S3 | `boda-artefactos-248033171214` | Privado (Block all public access), ACLs disabled, SSE-S3, **versioning activado** (permite volver a la versión anterior). Guarda `backend/app.jar`. |
 | 6 ✱ | Política IAM | `boda-backend-policy` | Reemplazar por el JSON de abajo (quita `Scan` y amplía S3 y tablas). |
-| 7 ✱ | Launch template | `boda-backend-lt` v3 (por defecto) | Igual que v2, con la user data de [research.md](research.md) R10 (descarga el `.jar` y lo arranca con `systemd`). |
-| 8 | Auto Scaling group | `boda-backend-asg` | LT `boda-backend-lt` (Default). Subredes `us-east-1a` y `us-east-1b` de la VPC por defecto. Asociado a `boda-backend-tg`. Health check ELB, gracia 300 s. Min/deseado/max = 1. Instance maintenance policy: *launch before terminating* (mínimo 100 %, máximo 200 %). Sin políticas de escalado. Tags propagados. |
-| 9 ✱ | Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Activar acciones cuando el backend esté sano (comando en `infra/README.md` §12). |
-| 10 | Amplify | `boda-invitados` | Repo `devdavco/boda-fotos`, rama `main`, monorepo `front-invitados`, rewrites de [research.md](research.md) R12. Anotar el dominio: es la **URL del QR**. |
-| 11 | Amplify | `boda-novios` | Igual, monorepo `front-novios`. |
-| 12 ✱ | CORS de `boda-fotos-2026` | — | `AllowedOrigins`: dominio de `boda-invitados` y `http://localhost:4200` (quitar antes del 19). `AllowedMethods`: `["PUT"]`. `ExposeHeaders`: `["ETag"]` (se mantiene: el navegador lee el `ETag` de cada parte del multipart para completarlo). Se quita el dominio de CloudFront: ninguna página se sirve desde ahí. **El dominio de `boda-novios` no se agrega**: ese front no usa `fetch` ni XHR contra S3; muestra con `<img>` y `<video>` y descarga con un enlace directo a la URL prefirmada con `Content-Disposition: attachment`, y nada de eso necesita CORS. Si algún día descarga con `fetch` (por ejemplo, para un ZIP), hay que agregar `GET` para su dominio. |
-| 13 | Ítem DynamoDB | `boda-evento` / `boda-2026` | Comando abajo. |
-| 14 | Ítems DynamoDB | `boda-admins` / `mara`, `daniel` | Procedimiento abajo. |
+| 7 | **Paso, no recurso**: `.jar` mínimo | `s3://boda-artefactos-248033171214/backend/app.jar` | Subir un `.jar` mínimo (esqueleto del backend: `/actuator/health` y un `/api/recepcion/estado` con respuesta fija para el spike de R1), construido con `mvn package` y copiado con `aws s3 cp`. **Debe existir antes de crear la launch template v3 y el ASG**: la user data hace `aws s3 cp` con `set -e`, y si el objeto no está, el servicio no arranca, la instancia nunca queda sana y el ASG la reemplaza en bucle. |
+| 8 ✱ | Launch template | `boda-backend-lt` v3 (por defecto) | Igual que v2, con la user data de [research.md](research.md) R10 (descarga el `.jar` y lo arranca con `systemd`). Se crea después del paso 7. Necesita el rol con la política del paso 6 ya reemplazada. |
+| 9 | Auto Scaling group | `boda-backend-asg` | **Se crea solo cuando el paso 7 está hecho y la v3 es la versión por defecto.** LT `boda-backend-lt` (Default). Subredes `us-east-1a` y `us-east-1b` de la VPC por defecto. Asociado a `boda-backend-tg`. Health check ELB, gracia 300 s. Min/deseado/max = 1. Instance maintenance policy: *launch before terminating* (mínimo 100 %, máximo 200 %). Sin políticas de escalado. Tags propagados. |
+| 10 ✱ | Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Activar acciones cuando el backend esté sano (comando en `infra/README.md` §12). |
+| 11 | Amplify | `boda-invitados` | Repo `devdavco/boda-fotos`, **rama `david/release`** (debe existir antes en `origin`, con `amplify.yml` y el esqueleto de `front-invitados` ya mergeados), monorepo `front-invitados`, rewrites de [research.md](research.md) R12. Anotar el dominio: es la **URL del QR**. Amplify reemplaza `/` por `-` en el subdominio de la rama, así que será del tipo `https://david-release.<appId>.amplifyapp.com`; confirmar el dominio exacto al conectar la rama. |
+| 12 | Amplify | `boda-novios` | Igual, **rama `david/release`**, monorepo `front-novios`. Si se crea antes de que exista la carpeta `front-novios/` en esa rama, su primer build falla; es esperado y se resuelve con el primer merge del esqueleto. |
+| 13 ✱ | CORS de `boda-fotos-2026` | — | `AllowedOrigins`: dominio de `boda-invitados` y `http://localhost:4200` (quitar antes del 19). `AllowedMethods`: `["PUT"]`. `ExposeHeaders`: `["ETag"]` (se mantiene: el navegador lee el `ETag` de cada parte del multipart para completarlo). Se quita el dominio de CloudFront: ninguna página se sirve desde ahí. **El dominio de `boda-novios` no se agrega**: ese front no usa `fetch` ni XHR contra S3; muestra con `<img>` y `<video>` y descarga con un enlace directo a la URL prefirmada con `Content-Disposition: attachment`, y nada de eso necesita CORS. Si algún día descarga con `fetch` (por ejemplo, para un ZIP), hay que agregar `GET` para su dominio. |
+| 14 | Ítem DynamoDB | `boda-evento` / `boda-2026` | Comando abajo. Lo necesita el backend completo, no el `.jar` mínimo. |
+| 15 | Ítems DynamoDB | `boda-admins` / `mara`, `daniel` | Procedimiento abajo. |
+
+Dependencias entre pasos: **bucket de artefactos (5) → política IAM (6) → `.jar` mínimo subido (7) →
+launch template v3 (8) → ASG (9)**. La política va antes del ASG porque la instancia descarga el
+`.jar` con el rol `boda-ec2-role`. El `.jar` mínimo se reemplaza después por el backend completo
+con un *instance refresh* (research R10).
 
 **No se crean**: parámetros de SSM (no hay secretos, R11), NAT Gateway, certificados ACM, pipeline
 de CI/CD, Lambda.
@@ -250,6 +256,13 @@ navegador está cubierta, y no sobra ninguna:
 - Las transacciones (`TransactWriteItems`) se autorizan con el `UpdateItem` de cada tabla.
 - No se usa `s3:ListMultipartUploadParts`: el navegador guarda los `ETag` de las partes y los envía
   al completar. Tampoco `s3:ListBucket` (R2), `dynamodb:Scan` ni KMS (el cifrado es SSE-S3).
+- **`ConditionCheck`**: ninguna `TransactWriteItems` del diseño lo usa. Las dos transacciones
+  (completar y eliminar un archivo, [data-model.md](data-model.md) §2) son pares de `Update`: uno
+  sobre el ítem del archivo, con su condición (`estado = PENDIENTE` o `COMPLETADO`) dentro de la
+  propia `Update`, y otro sobre el ítem del evento para los contadores. Eso se autoriza con
+  `dynamodb:UpdateItem` en cada tabla; `dynamodb:ConditionCheckItem` solo hace falta cuando una
+  transacción incluye una operación `ConditionCheck` aparte, y por eso no se agrega. Si el diseño
+  cambia y se añade una, hay que sumar `dynamodb:ConditionCheckItem` a la tabla de esa operación.
 - La creación de cuentas y del ítem del evento se hace desde CloudShell con tu usuario, no con el
   rol.
 - El rol sigue teniendo `AmazonSSMManagedInstanceCore` para Session Manager.
@@ -295,6 +308,19 @@ aws dynamodb update-item --table-name boda-admins --key '{"usuario":{"S":"mara"}
 
 Las contraseñas se entregan a Mara y Daniel por un canal privado y nunca se escriben en el repo.
 
+## Ramas y despliegue de los front-ends
+
+- Las dos apps de Amplify (`boda-invitados` y `boda-novios`) se conectan a la rama
+  **`david/release`**, no a `main`. Cada push a esa rama dispara el despliegue.
+- Flujo: se trabaja en ramas `david/...`; solo cuando algo está listo (probado en local y, si
+  aplica, en el celular) se hace merge a `david/release`. Eso es lo que llega a producción.
+- Del 19 al 22 de noviembre solo entran a `david/release` correcciones críticas (las que impiden
+  subir o consultar archivos), más la excepción del front de novios (ver "Complexity Tracking").
+- `main` y el resto de las ramas no despliegan nada. El backend tampoco depende de la rama: se
+  construye en local y se publica como `.jar` en el bucket de artefactos (research R10).
+- La rama `david/release` **no existe todavía en `origin`**. Crearla antes de conectar Amplify.
+- El dominio de Amplify depende del nombre de la rama: no renombrarla ni desconectarla (riesgo K6).
+
 ## Calendario y alcance
 
 Hoy es sábado 2026-11-14. Quedan unos **4 días y medio** hasta el miércoles 18. El trabajo
@@ -304,7 +330,7 @@ lo que no se puede perder.
 
 | Día | Objetivo | Criterio de salida |
 | --- | --- | --- |
-| Sáb 14 (tarde) | Recursos 1–8 y 10–13. Esqueleto del backend (`/actuator/health`, `/api/recepcion/estado`) desplegado con el ASG. Esqueleto de `front-invitados` en Amplify. **Spike** de R1 (proxy de Amplify) y R2 (PUT prefirmado desde un iPhone). | Desde el iPhone, la página de Amplify muestra el estado y sube una foto a S3. |
+| Sáb 14 (tarde) | En este orden: (1) tablas y GSI (1–4) y bucket de artefactos (5); (2) política IAM (6); (3) **`.jar` mínimo con `/actuator/health` subido al bucket** (7); (4) launch template v3 (8); (5) **ASG (9), solo con el `.jar` ya en el bucket**; (6) rama `david/release` con `amplify.yml` y el esqueleto de `front-invitados`, y las apps de Amplify (11 y 12) y el CORS (13); (7) ítem del evento (14). **Spike** de R1 (proxy de Amplify) y R2 (PUT prefirmado desde un iPhone). | `boda-backend-tg` con 1 instancia *healthy*. Desde el iPhone, la página de Amplify muestra el estado y sube una foto a S3. |
 | Dom 15 | Backend de invitados completo (sesiones, autorizar, partes, completar, validaciones, tope). Front de invitados con subida simple, progreso y reintento. | Fotos de 2 celulares reales en `boda-fotos` como `COMPLETADO`. |
 | Lun 16 | Multipart en el front. Miniaturas en el celular. Backend de admin (login, bloqueo, resumen, galería, URLs, eliminar, cerrar). Cuentas de Mara y Daniel. | Video de 300 MB por red móvil con corte y reanudación. Login por `curl`. |
 | Mar 17 | Front de novios. Activar alarmas. Primera pasada de la lista de chequeo §4. | Galería navegable en celular y escritorio. |
@@ -348,8 +374,8 @@ el congelamiento, **como máximo antes del 2026-11-22 a las 12:00**. Condiciones
 | K3 | Comportamiento real de los celulares: Safari suspende en segundo plano, `file.type` vacío en HEIC/MOV, generación de miniaturas inestable en iOS. | Subidas fallidas o rechazos falsos. | Tipo por extensión, reintento, aviso de mantener la pantalla abierta, miniatura con tiempo máximo y sin bloquear la subida. Pruebas en celulares reales desde el día 1 (R13). |
 | K4 | Una sola instancia del backend. | Si cae durante la boda, nadie puede autorizar subidas por unos 5 min mientras el ASG la reemplaza. | Las subidas ya autorizadas siguen yendo a S3. La alarma avisa en < 10 min (SC-010). Health check solo de liveness. La constitución no permite cómputo multi-AZ sin justificación. |
 | K5 | Olvidar restaurar la ventana real o borrar los datos de prueba tras la verificación del 17–18. | La recepción abre antes de tiempo o la galería empieza con basura. | Paso obligatorio §4.9 del quickstart, revisado el 18 por la noche. |
-| K6 | Recrear o borrar la app de Amplify de invitados cambia su dominio. | El QR impreso deja de funcionar. | Crear la app el sábado 14, no borrarla nunca e imprimir el QR solo después de §4.9. |
-| K7 | Un push a `main` durante el congelamiento despliega solo. | Cambio no probado en plena boda. | Trabajar en ramas y hacer merge a `main` solo de correcciones críticas del 19 al 22. |
+| K6 | Recrear o borrar la app de Amplify de invitados, o renombrar o desconectar la rama `david/release`, cambia su dominio (el subdominio sale del nombre de la rama). | El QR impreso deja de funcionar. | Crear la app y la rama el sábado 14, no borrarlas ni renombrarlas nunca e imprimir el QR solo después de §4.9. |
+| K7 | Un merge a `david/release` durante el congelamiento despliega solo, y esa rama alimenta las dos apps. | Cambio no probado en plena boda, o un front de novios que vuelve a desplegar el de invitados. | Trabajar en ramas `david/...` y hacer merge a `david/release` solo cuando algo está listo; del 19 al 22 solo correcciones críticas y el front de novios de la excepción; desactivar el *auto build* de `boda-invitados` durante esos días (ver condiciones de la excepción). |
 | K8 | Una subida simple llega a S3 pero su finalización no (el navegador se cerró justo al terminar). | Un archivo que los novios no ven. | El front reintenta la finalización. Revisión manual de huérfanos después del cierre (quickstart §5). |
 | K9 | Si S3 no firma el `Content-Length`, alguien puede subir más bytes de los declarados con una URL válida durante 5 min. | Almacenamiento extra (nunca entra a la galería). | Verificación con `HeadObject` al completar y borrado; tope por sesión; se comprueba en el spike (R2). |
 | K10 | Costo: el ALB y las IPv4 públicas dominan (~17 USD); descargas por encima de 100 GB/mes. | Pasar el presupuesto de USD 30/mes. | Estimación en R16 (~26–32 USD en el periodo, repartidos en 2 meses). Apagar el cómputo el 2026-12-02. El aviso del presupuesto sigue activo. |
@@ -365,9 +391,10 @@ Condiciones de la excepción:
 - Cubre **solo** `front-novios`. El backend completo (también el API de administración), el front
   de invitados y la infraestructura se despliegan y verifican antes del 2026-11-18, como exige la
   constitución. Publicar el front de novios no toca nada del camino de los invitados.
-- Del 19 al 22, desactivar el *auto build* de la rama `main` en la app `boda-invitados` de Amplify,
-  para que un push del front de novios no vuelva a desplegar el front de invitados. Se reactiva
-  solo para una corrección crítica y después del 22.
+- El front de novios se desarrolla en una rama `david/...` y entra a `david/release` solo cuando
+  está listo. Del 19 al 22, desactivar el *auto build* de la rama `david/release` en la app
+  `boda-invitados` de Amplify, para que ese merge no vuelva a desplegar el front de invitados. Se
+  reactiva solo para una corrección crítica del front de invitados y después del 22.
 - Antes de publicarlo: login, galería, descarga, eliminar y cerrar la recepción ya están
   verificados por `curl` contra producción el 18 (quickstart §4.5 y §4.6). Al publicarlo se repiten
   §4.5 y §4.6 desde la interfaz, en celular y escritorio.

@@ -8,7 +8,8 @@ Lo que ve cada usuario y qué llamada del [API](api.md) lo respalda. Todo el tex
 ## Front de invitados (`front-invitados/`, Amplify)
 
 - **URL del QR**: la raíz del dominio de Amplify de la app de invitados
-  (`https://main.<appId>.amplifyapp.com/`). Es una sola pantalla, sin rutas internas (FR-001).
+  (`https://david-release.<appId>.amplifyapp.com/`; el subdominio sale del nombre de la rama
+  `david/release`, por eso no se renombra). Es una sola pantalla, sin rutas internas (FR-001).
 - **Al abrir**: `GET /api/recepcion/estado`.
 
 | Estado | Lo que se muestra |
