@@ -13,3 +13,16 @@ management:
   endpoint:
     health:
       show-details: never
+
+# Variables de entorno de boda.service (research R10). Los nombres de bucket y tablas son los del
+# proyecto; EVENT_ID no tiene valor por defecto a propósito: en local se usa boda-prueba
+# (quickstart.md §2) y un valor vacío hace fallar el arranque en vez de tocar el evento real.
+boda:
+  aws-region: ${AWS_REGION:us-east-1}
+  s3-bucket: ${S3_BUCKET:boda-fotos-2026}
+  event-id: ${EVENT_ID:}
+  tablas:
+    fotos: ${DYNAMODB_TABLE_PHOTOS:boda-fotos}
+    evento: ${DYNAMODB_TABLE_EVENT:boda-evento}
+    admins: ${DYNAMODB_TABLE_ADMINS:boda-admins}
+    sesiones: ${DYNAMODB_TABLE_SESSIONS:boda-sesiones}
