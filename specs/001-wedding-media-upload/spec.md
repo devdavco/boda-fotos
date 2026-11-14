@@ -29,6 +29,12 @@ desde un front-end privado y separado.
   al autorizar subidas, más un contador de archivos recibidos visible en la galería de los novios.
 - Q: ¿Los novios necesitan filtrar o buscar en la galería? → A: Opción A — sin filtros ni búsqueda;
   cuadrícula ordenada del más reciente al más antiguo con carga progresiva.
+- Q: ¿Se borra automáticamente el material después del 1 de diciembre? → A: No. Daniel decidió
+  quitar el borrado automático del 2 de diciembre; originales y miniaturas se conservan en el
+  almacenamiento privado hasta nuevo aviso de los novios. La regla de lifecycle de expiración ya
+  se eliminó del bucket y solo queda la que aborta cargas multipart incompletas. La galería sigue
+  dejando de mostrar el material después del 1 de diciembre a las 23:59 (FR-032 no cambia); la
+  eliminación definitiva será manual, por el responsable técnico, cuando los novios la pidan.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -160,8 +166,9 @@ muestra ni permite descargar el material.
    ingresan, **Then** pueden consultar y descargar el material.
 2. **Given** terminó el periodo de disponibilidad, **When** los novios ingresan, **Then** la galería
    informa que el periodo terminó y no permite ver ni descargar archivos.
-3. **Given** es 2 de diciembre de 2026 o después, **When** se revisa el almacenamiento, **Then** los
-   originales y miniaturas del evento han sido eliminados permanentemente.
+3. **Given** terminó el periodo de disponibilidad, **When** se revisa el almacenamiento, **Then** los
+   originales y miniaturas del evento siguen conservados en el almacenamiento privado (sin borrado
+   automático) hasta que los novios pidan su eliminación.
 
 ---
 
@@ -303,10 +310,10 @@ muestra ni permite descargar el material.
 - **FR-032**: Los archivos MUST poder consultarse y descargarse hasta el final del 1 de diciembre de
   2026 (23:59, hora de Cali); después la galería MUST informar que el periodo terminó y no permitir
   ver ni descargar.
-- **FR-033**: Tras el fin del periodo, todos los originales, miniaturas y subidas incompletas MUST
-  eliminarse permanentemente de forma automática a partir del 2 de diciembre de 2026, sin copias
-  archivadas. Los novios son responsables de descargar lo que deseen conservar antes del fin del
-  1 de diciembre.
+- **FR-033**: Después del fin del periodo de disponibilidad, los originales y miniaturas MUST
+  conservarse en el almacenamiento privado hasta nuevo aviso de los novios. No hay borrado
+  automático. La eliminación definitiva se hará manualmente, por el responsable técnico, cuando
+  los novios lo pidan. Las cargas multipart incompletas MUST seguir limpiándose automáticamente.
 
 **Fuera de alcance (fase 1)**
 
@@ -352,7 +359,8 @@ muestra ni permite descargar el material.
 - **SC-008**: El 100% de la lista de chequeo manual (constitución) se completa en producción antes
   del 19 de noviembre de 2026.
 - **SC-009**: Un mes después del evento no quedan cargos residuales por subidas incompletas ni por
-  infraestructura sin usar.
+  infraestructura sin usar. El almacenamiento de los originales y miniaturas conservados hasta
+  nuevo aviso es un costo esperado y no cuenta como cargo residual.
 - **SC-010**: Ante una caída del servicio durante la ventana de recepción, el responsable técnico
   recibe la alerta en menos de 10 minutos.
 
@@ -370,9 +378,12 @@ muestra ni permite descargar el material.
 - No se convierten HEIC ni se procesan videos en el servidor; la única miniatura derivada es la
   del video, generada en el celular del invitado.
 - La eliminación por parte de los novios es definitiva (no hay papelera).
-- La eliminación automática del 2 de diciembre puede completarse en el transcurso de ese día
-  (no al minuto exacto), lo cual es aceptable para los novios.
-- Los novios deben ser avisados en la galería (p. ej. un banner) de la fecha límite de descarga.
+- No hay eliminación automática del material tras el 1 de diciembre; solo se limpian
+  automáticamente las cargas multipart incompletas. La eliminación definitiva es manual, a pedido
+  de los novios.
+- Los novios deben ser avisados en la galería (p. ej. un banner) de la fecha límite de descarga. El
+  banner también informa que, después del 1 de diciembre, el material solo se puede recuperar
+  pidiéndolo al responsable técnico.
 - El tope por sesión frena el abuso casual, no a un atacante decidido que abra sesiones nuevas;
   sin cuentas de invitado esto se acepta para la fase 1.
 - Volumen esperado: del orden de 100–300 invitados y de 2.000 a 5.000 archivos en total.

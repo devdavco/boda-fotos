@@ -14,7 +14,7 @@ consulten, descarguen y administren desde un front-end privado.
 | 2026-11-21 | Boda |
 | 2026-11-22 12:00 | Cierra la recepción (los novios pueden cerrarla antes) |
 | 2026-12-01 23:59 | Último momento para consultar y descargar el material |
-| 2026-12-02 | Eliminación permanente automática de originales y miniaturas |
+| 2026-12-02 | Sin borrado automático: el material se conserva en el almacenamiento privado hasta nuevo aviso de los novios |
 
 ## Alcance (fase 1)
 
