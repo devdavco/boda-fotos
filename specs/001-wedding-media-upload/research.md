@@ -330,7 +330,14 @@ systemctl enable --now boda
 ## R13. Compatibilidad móvil
 
 - **Decision**:
-  - `<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,.heic,video/mp4,video/quicktime,.mov">`.
+  - `<input type="file" multiple accept="image/*,video/mp4,video/quicktime">`. **El `accept` no
+    debe incluir `image/heic` ni `.heic`**: cuando el selector pide un tipo concreto de imagen,
+    iOS entrega las fotos HEIC tal cual; con `image/*` las convierte a JPEG al pasarlas al
+    navegador, y así hay miniatura (la hace el celular con `<canvas>`, que no decodifica HEIC) y la
+    foto se ve en cualquier navegador. Con `image/*` el selector también ofrece formatos que el
+    sistema no admite (por ejemplo GIF): los rechaza la validación local de `tipos.ts` y, si se
+    saltara, el servidor (`TIPO_NO_PERMITIDO`). El servidor sigue aceptando `.heic` (FR-010) para
+    los casos en que el archivo llegue sin convertir.
   - El tipo se deduce de la **extensión** cuando el navegador entrega `file.type` vacío (pasa con
     HEIC y MOV en Android). El `Content-Type` firmado sale de la tabla del backend, no del
     navegador.
@@ -345,15 +352,16 @@ systemctl enable --now boda
   - En la vista completa del front de novios, HEIC y algunos MOV (HEVC) no se ven en Chrome de
     escritorio: se muestra el ícono y el botón de descarga.
   - **Observado en el spike (2026-11-14)**: un iPhone (Vivaldi, motor WebKit) entrega las fotos
-    HEIC al navegador **ya convertidas a JPEG**, con `file.type = image/jpeg`. Entonces las fotos
-    del iPhone llegan como JPEG y el caso HEIC real queda para archivos que no pasan por el
-    selector de fotos de iOS.
-  - **Por verificar con el nombre del archivo**: el servidor decide el formato por la extensión y
-    rechaza si el tipo declarado la contradice (`TIPO_NO_PERMITIDO`). Si iOS entrega un JPEG con
-    nombre `.heic`, esas fotos se rechazarían por error. El spike muestra el nombre del archivo:
-    anotarlo en la lista de chequeo (§4.1). Si conserva `.heic`, el front debe deducir el formato
-    por el contenido (`file.type`) y enviar al servidor el nombre y la extensión coherentes, o el
-    servidor debe aceptar `image/jpeg` con extensión `.heic` y verificar por la firma de bytes.
+    HEIC al navegador **ya convertidas a JPEG**: `file.type = image/jpeg` y **también cambia la
+    extensión** (`IMG_6816.jpeg` por WiFi y `360919F4-7D59-4FF9-86D2-E09FB1C7F30A.jpeg` por 4G).
+    Por eso la regla del servidor (el formato lo decide la extensión y se rechaza si el tipo
+    declarado la contradice) **no cambia**: no hay `.heic` con contenido JPEG. Esto se observó con
+    el spike, cuyo `<input type="file">` no tenía `accept`; la conversión depende del `accept`
+    (ver arriba).
+  - **Por verificar en Safari con una foto HEIC real** (lista de chequeo, `quickstart.md` §4.1),
+    con el `accept` de arriba: que el archivo llegue como `.jpeg` con `image/jpeg`, que el front
+    genere la miniatura y que la galería la muestre. Si Safari entregara el HEIC sin convertir,
+    esa foto se sube igual (FR-010) pero sin miniatura y con ícono en la galería.
   - Vivaldi en iOS usa el motor de WebKit como todos los navegadores de iOS, pero no es Safari: la
     verificación en Safari y en Android/Chrome queda para la lista de chequeo (§4.1).
 - **Rationale**: son las fallas típicas de subidas desde el navegador del celular. Se descubren

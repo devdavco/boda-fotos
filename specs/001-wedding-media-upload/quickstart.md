@@ -80,9 +80,13 @@ se abre la ventana a mano y después se restaura.
 
 **4.1 Subida desde celulares reales con red móvil** (US1, SC-001 a SC-003)
 
-- [ ] iPhone/Safari, datos móviles: escanear el QR impreso, escribir el nombre, subir 5 fotos
-      (incluida una HEIC si el celular las genera) y 1 video < 100 MB. Cada archivo muestra
-      progreso y "Listo". La primera foto sube en menos de 1 minuto desde el escaneo.
+- [ ] iPhone/Safari, datos móviles: escanear el QR impreso, escribir el nombre, subir 5 fotos y
+      1 video < 100 MB. Cada archivo muestra progreso y "Listo". La primera foto sube en menos de
+      1 minuto desde el escaneo.
+- [ ] iPhone/Safari, **foto HEIC real** tomada con la cámara (formato "Alta eficiencia"): el
+      archivo llega como `.jpeg` con tipo `image/jpeg` (el `accept` del selector no incluye
+      `image/heic`, research R13), se genera la miniatura y la galería de los novios la muestra.
+      Anotar el nombre y el tipo que muestra el front para esa foto.
 - [ ] Android/Chrome, datos móviles: lo mismo, más **un video de 100 MB o más** (multipart).
 - [ ] Samsung Internet (si hay un equipo disponible): una foto y un video.
 - [ ] Recargar la página: el nombre aparece prellenado (FR-004a).
