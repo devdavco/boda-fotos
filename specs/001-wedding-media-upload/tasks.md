@@ -60,7 +60,7 @@ description: "Lista de tareas del feature 001-wedding-media-upload"
 
 ### 1C. Rama `david/release`, esqueleto del front de invitados y Amplify
 
-- [ ] T016 **[CÓDIGO]** Crear el proyecto Angular 21 `front-invitados/` con Node 22 (`npx @angular/cli@21 new front-invitados --routing=false --style=css --ssr=false --skip-git`) en la raíz del repo; comprobar que `npm run build` genera `front-invitados/dist/front-invitados/browser`. Archivo base: `front-invitados/package.json`
+- [x] T016 **[CÓDIGO]** Crear el proyecto Angular 21 `front-invitados/` con Node 22 (`npx @angular/cli@21 new front-invitados --routing=false --style=css --ssr=false --skip-git`) en la raíz del repo; comprobar que `npm run build` genera `front-invitados/dist/front-invitados/browser`. Archivo base: `front-invitados/package.json`
 - [ ] T017 [P] **[CÓDIGO]** Crear `front-invitados/proxy.conf.json` (`/api` → `http://localhost:8080`, `secure: false`) y referenciarlo en `front-invitados/angular.json` (`serve.options.proxyConfig`) para `ng serve` (research R12)
 - [ ] T018 [P] **[CÓDIGO]** Reemplazar `front-invitados/src/app/app.ts` (y su plantilla) por una pantalla mínima que llama a `GET /api/recepcion/estado` con `HttpClient` (provider en `front-invitados/src/app/app.config.ts`) y muestra "Estado de la recepción: <estado>"; sirve para el *spike* de R1
 - [ ] T019 [P] **[CÓDIGO]** Crear `amplify.yml` en la raíz del repo con `applications:` para `front-invitados` y `front-novios` (`appRoot` por app): `preBuild` con `nvm use 22` y `npm ci`, `build` con `npm run build`, `artifacts.baseDirectory: dist/<app>/browser`, `files: '**/*'` y cache de `node_modules` (research R12)
