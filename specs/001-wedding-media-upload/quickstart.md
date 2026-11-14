@@ -60,7 +60,7 @@ Resultado esperado: en menos de 10 minutos el target group `boda-backend-tg` tie
 
 **Front-ends**: merge a `david/release` y `git push` de esa rama; el trabajo diario va en ramas
 `david/...` y solo se mergea lo que está listo. Amplify construye y publica las dos apps desde
-`david/release`. Comprobar en cada dominio de Amplify que `/api/recepcion/estado` responde el mismo
+`david/release`. Dominio de invitados: `https://david-release.d2x2ckep95pz3x.amplifyapp.com`. Comprobar en cada dominio de Amplify que `/api/recepcion/estado` responde el mismo
 JSON (esto valida el rewrite).
 
 **Primera vez** (orden del plan, "Recursos AWS"): crear la rama `david/release` con `amplify.yml` y
@@ -165,7 +165,7 @@ se abre la ventana a mano y después se restaura.
 - [ ] Eliminar desde la galería **todos los archivos de prueba**; el contador queda en 0.
 - [ ] La página de invitados muestra "abre el jueves 19 de noviembre".
 - [ ] Quitar `http://localhost:4200` del CORS del bucket; activar PITR en las tablas.
-- [ ] Imprimir o validar el QR con la URL definitiva de Amplify.
+- [ ] Imprimir o validar el QR con la URL definitiva de Amplify (`https://david-release.d2x2ckep95pz3x.amplifyapp.com`).
 
 ## 5. Durante y después del evento
 

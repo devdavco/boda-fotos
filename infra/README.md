@@ -49,7 +49,8 @@ Los archivos nunca pasan por CloudFront, el ALB ni la EC2: van directo entre el 
 | SNS | `boda-alertas` | Creado |
 | Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Creadas, acciones desactivadas |
 | Presupuesto | `boda-presupuesto` | Creado |
-| Apps de Amplify | — | Pendiente (faltan los front-ends) |
+| App de Amplify de invitados | `boda-invitados` | Creada, rama `david/release` (§11) |
+| App de Amplify de novios | `boda-novios` | Pendiente (hasta que exista `front-novios/`) |
 
 El `.jar` que corre hoy es el **esqueleto del backend** (`/actuator/health` y un
 `GET /api/recepcion/estado` de respuesta fija). El backend completo lo reemplaza con el
@@ -83,8 +84,9 @@ Los recursos dependen unos de otros. Si hay que recrear todo, seguir este orden:
 11. Subir el `.jar` al bucket de artefactos (§13); **antes** de la launch template y del ASG
 12. Launch template (§6)
 13. Auto Scaling group (§14)
-14. CORS del bucket (§2; necesita los dominios de CloudFront y Amplify)
-15. SNS y alarmas (§12)
+14. App de Amplify de invitados (§11); **recrearla cambia el dominio del QR**
+15. CORS del bucket (§2; necesita el dominio de Amplify)
+16. SNS y alarmas (§12)
 ---
 
 ## 1. Seguridad de la cuenta y presupuesto
@@ -108,23 +110,30 @@ Consola: S3 → Create bucket.
 
 ### CORS
 
-Permissions → Cross-origin resource sharing. Debe incluir el dominio de Amplify de invitados
-cuando exista. `http://localhost:4200` se quita antes del 2026-11-19.
+Permissions → Cross-origin resource sharing. Solo la página de invitados sube desde el navegador a
+S3 con `PUT`; la galería de los novios muestra y descarga con `<img>`, `<video>` y enlaces directos,
+que no necesitan CORS, y por eso su dominio no se agrega. `http://localhost:4200` es para
+`ng serve` y se quita antes del 2026-11-19. Valor vigente desde el 2026-11-14:
 
 ```json
 [
   {
     "AllowedOrigins": [
-      "https://ddl2si3h6lu7z.cloudfront.net",
+      "https://david-release.d2x2ckep95pz3x.amplifyapp.com",
       "http://localhost:4200"
     ],
-    "AllowedMethods": ["PUT", "GET"],
+    "AllowedMethods": ["PUT"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3000
   }
 ]
 ```
+
+`ExposeHeaders: ETag` es necesario: en las subidas multipart el navegador lee el `ETag` de cada
+parte para completar la carga. Ya no están el dominio de CloudFront (ninguna página se sirve desde
+ahí) ni el método `GET`. Si el front de novios llegara a descargar con `fetch`, habría que agregar
+`GET` para su dominio.
 
 ### Lifecycle
 
@@ -415,15 +424,48 @@ Dominio: `https://ddl2si3h6lu7z.cloudfront.net`
 En `boda-alb-sg`, reemplazar las reglas de entrada abiertas por una sola: HTTP 80 desde el prefix
 list `com.amazonaws.global.cloudfront.origin-facing`.
 
-## 11. Amplify (pendiente)
+## 11. Amplify Hosting
 
-Dos apps desde este repositorio, una por front-end, con despliegue en cada push. En cada una:
+Dos apps desde este repositorio (`devdavco/boda-fotos`), una por front-end, con despliegue en cada
+push a la rama **`david/release`**. Se trabaja en ramas `david/...` y solo lo que está listo se
+mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones críticas (plan,
+"Ramas y despliegue de los front-ends"). El monorepo se construye con el `amplify.yml` de la raíz.
 
-- Rewrite `/api/<*>` → `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` (tipo 200, reverse proxy),
-  para que el front llame a `/api` en su propio dominio y no necesite CORS.
-- Rewrite de SPA para que las rutas de Angular resuelvan a `index.html`.
+### `boda-invitados` (creada el 2026-11-14)
 
-Al crearlas, agregar aquí sus dominios y añadir el de invitados al CORS del bucket.
+- Repositorio `devdavco/boda-fotos`, rama `david/release`, monorepo con la carpeta
+  `front-invitados` (`AMPLIFY_MONOREPO_APP_ROOT=front-invitados`).
+- Build: *Standard build*. Amplify creó el *service role* de la app.
+- Tag: `proyecto=boda`.
+- **Dominio: `https://david-release.d2x2ckep95pz3x.amplifyapp.com`**. Es la **URL del QR**. El
+  subdominio sale del nombre de la rama y del identificador de la app, así que **no se recrea la
+  app, no se renombra la rama `david/release` y no se desconecta la rama** (riesgo K6 del plan): el
+  QR impreso dejaría de funcionar.
+- Rewrites (Hosting → Rewrites and redirects), en este orden:
+
+| Origen | Destino | Tipo |
+| --- | --- | --- |
+| `/api/<*>` | `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` | 200 (Rewrite) |
+| `</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>` | `/index.html` | 200 (Rewrite) |
+
+  La primera regla hace que el front llame a `/api/...` en su propio dominio y no necesite CORS. La
+  segunda es la de SPA: las rutas de Angular resuelven a `index.html` y los archivos con extensión
+  conocida (`.js`, `.css`, imágenes, etc.) se sirven tal cual.
+- Verificación del *spike* de R1 (2026-11-14, con el backend mínimo):
+  - `GET /api/recepcion/estado` por el dominio de Amplify: 200, el mismo JSON que por CloudFront.
+  - `POST` y `DELETE` al mismo path: 405 **generado por Spring**, lo que prueba que ambos métodos
+    atraviesan el rewrite y llegan al backend.
+  - Rutas de Angular (rutas que no son un archivo): 200 con `index.html`.
+  - **Pendiente** (tarea T052): reenvío del cuerpo JSON y de los encabezados `Authorization` y
+    `X-Sesion-Subida`, que solo se puede probar con los endpoints reales. Si algo no se reenvía,
+    plan B de R1 (llamar directo a CloudFront con CORS en Spring).
+
+### `boda-novios` (pendiente)
+
+Igual que la anterior, con la carpeta `front-novios` (`AMPLIFY_MONOREPO_APP_ROOT=front-novios`) y
+sus propios rewrites. Se crea cuando exista `front-novios/` en `david/release`; con la carpeta
+ausente su primer build falla. Al crearla, anotar aquí su dominio. Su dominio **no** va en el CORS
+del bucket.
 
 ## 12. Monitoreo (FR-030a)
 
@@ -569,7 +611,7 @@ artefactos (§13) y la v3 de la launch template es la versión por defecto (§6)
 ## Pendientes
 - Reemplazar el `.jar` mínimo por el backend completo (§13) a medida que se implementa.
 - Activar las acciones de las alarmas cuando esté el backend completo (§12).
-- Apps de Amplify y su dominio en el CORS del bucket (§11).
+- Crear la app de Amplify `boda-novios` cuando exista `front-novios/` (§11).
 - Crear las cuentas `mara` y `daniel` en `boda-admins` (§3).
 - Antes del 2026-11-19: quitar `localhost` del CORS y ejecutar la lista de chequeo manual en
   celulares reales.
