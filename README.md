@@ -34,10 +34,13 @@ redes sociales y descarga en ZIP.
 
 ## Stack previsto
 
-- **Backend:** Java + Spring Boot (Maven) en EC2 detrás de un ALB con HTTPS.
-- **Front-ends:** dos apps Angular 21 (invitados y novios) en S3 + CloudFront con OAC.
+- **Backend:** Java + Spring Boot (Maven) en EC2 detrás de un ALB, publicado con HTTPS por CloudFront
+  (sin dominio propio ni ACM; CloudFront → ALB va por HTTP y el ALB solo acepta tráfico de CloudFront).
+- **Front-ends:** dos apps Angular 21 (invitados y novios) en AWS Amplify Hosting, con despliegue en
+  cada push al repo.
 - **Datos:** S3 privado (medios) y DynamoDB on-demand (admins, configuración del evento, metadatos).
-- **Infraestructura:** AWS CDK en TypeScript, una sola región (candidata `mx-central-1`).
+- **Infraestructura:** creada por la consola de AWS, una sola región (`us-east-1`), con cada recurso
+  documentado en el repo para poder recrearlo.
 
 ## Estado actual
 
@@ -45,13 +48,13 @@ Se trabaja con [Spec Kit](https://github.com/github/spec-kit)
 (`/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`).
 
 - [x] Requerimientos de negocio — [`reqs/requerimientos_fotos_boda.md`](reqs/requerimientos_fotos_boda.md)
-- [x] Constitución del proyecto v1.0.0 — [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
+- [x] Constitución del proyecto v2.0.0 — [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
 - [x] Especificación del feature `001-wedding-media-upload` —
   [`specs/001-wedding-media-upload/spec.md`](specs/001-wedding-media-upload/spec.md)
   (checklist de calidad completo; aclaraciones de cuentas admin y retención resueltas)
-- [ ] Plan técnico (`/speckit-plan`): región definitiva, dominio/DNS y estimación de costos
+- [ ] Plan técnico (`/speckit-plan`): estimación de costos
 - [ ] Tareas (`/speckit-tasks`)
-- [ ] Implementación (backend, front-ends, infraestructura CDK)
+- [ ] Implementación (backend, front-ends, infraestructura documentada en consola)
 - [ ] Lista de chequeo manual ejecutada en producción antes del 2026-11-19
 
 ## Estructura del repositorio
