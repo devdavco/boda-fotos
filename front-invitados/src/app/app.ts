@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 
+import { Spike } from './spike';
+
 interface EstadoRecepcion {
   estado: string;
   aperturaEn: string;
@@ -15,6 +17,7 @@ interface EstadoRecepcion {
  */
 @Component({
   selector: 'app-root',
+  imports: [Spike],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -23,6 +26,8 @@ export class App {
 
   protected readonly estado = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
+  /** Pantalla temporal del spike de R2: solo con `#spike` en la URL (se elimina en T094). */
+  protected readonly spike = location.hash === '#spike';
 
   constructor() {
     this.http.get<EstadoRecepcion>('/api/recepcion/estado').subscribe({
