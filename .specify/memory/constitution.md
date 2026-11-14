@@ -1,20 +1,29 @@
 <!--
 Sync Impact Report
-- Version change: (template) → 1.0.0
-- Principios definidos (nuevos):
-  I. La fecha del evento manda (simplicidad)
-  II. Privado y seguro por defecto
-  III. El servidor es la autoridad
-  IV. Móvil primero y resiliente a redes inestables
-  V. Infraestructura como código y costo acotado
-  VI. Español y respeto por el invitado
-- Secciones añadidas: Restricciones técnicas y stack; Flujo de trabajo y control de calidad; Gobernanza
-- Secciones eliminadas: ninguna
+- Version change: 1.0.0 → 2.0.0 (MAJOR: se redefine el Principio V)
+- Enmiendas aprobadas por el profesor el 2026-11-13:
+  1. Infraestructura creada por la consola de AWS (no AWS CDK); cada recurso documentado en el
+     repo para poder recrearlo.
+  2. Front-ends Angular en AWS Amplify Hosting con despliegue en cada push (no S3 + CloudFront
+     con OAC).
+  3. Región única `us-east-1`.
+  4. Sin dominio propio: HTTPS con los dominios de CloudFront (API) y Amplify (front-ends); sin
+     certificado ACM en el ALB.
+- Principios modificados:
+  - II. Privado y seguro por defecto (sitios estáticos y HTTPS)
+  - V. "Infraestructura como código y costo acotado" → "Infraestructura documentada y costo
+    acotado" (redefinido)
+- Secciones modificadas: Restricciones técnicas y stack (cómputo, front-ends, infraestructura);
+  Flujo de trabajo y control de calidad (viñeta de commits: se retira `cdk diff`/`cdk deploy`)
+- Secciones añadidas / eliminadas: ninguna
 - Templates revisados: plan-template.md, spec-template.md, tasks-template.md (leen la
   constitución en tiempo de ejecución; no requieren cambios)
-- TODOs diferidos: ninguno en la constitución. Las preguntas abiertas de negocio (fin exacto del
-  1 de diciembre, retención posterior, número de cuentas admin, recuperación de contraseña,
-  región definitiva, dominio/DNS) se resuelven en /speckit-clarify.
+- Impacto en specs/planes existentes: ninguno detectado en la constitución; el plan técnico
+  (/speckit-plan) debe partir de us-east-1, Amplify y consola. Resueltas: región definitiva y
+  dominio/DNS.
+- TODOs diferidos: las preguntas abiertas de negocio (fin exacto del 1 de diciembre, retención
+  posterior, número de cuentas admin, recuperación de contraseña) se resuelven en
+  /speckit-clarify.
 -->
 
 # QR Matrimonio Constitution
@@ -43,8 +52,12 @@ evento vale más que uno completo que no llegue.
 
 - El bucket de medios MUST tener Block Public Access activado y cifrado en reposo; todo acceso
   (subida y lectura) MUST hacerse con URLs prefirmadas de corta duración emitidas por el backend.
-- Los sitios estáticos se sirven por CloudFront con Origin Access Control; sus buckets tampoco son
-  públicos. Todo el tráfico MUST ir por HTTPS.
+- Los front-ends se sirven desde AWS Amplify Hosting, sin buckets públicos propios. Todo el
+  tráfico de los navegadores MUST ir por HTTPS, con los dominios de CloudFront (API) y Amplify
+  (front-ends).
+- El tramo CloudFront → ALB va por HTTP dentro de AWS. Por eso el ALB MUST aceptar tráfico solo
+  desde CloudFront (security group limitado al prefix list de CloudFront) y no ser accesible
+  directamente desde internet.
 - Las contraseñas de administradores MUST almacenarse solo como hash con salt único usando una
   función para contraseñas (Argon2id o bcrypt vía Spring Security). Nunca en texto claro ni con
   cifrado reversible.
@@ -90,14 +103,12 @@ lugar.
 **Razón:** los invitados suben desde datos móviles en plena fiesta; cada fricción se traduce en
 fotos que nunca llegan.
 
-### V. Infraestructura como código y costo acotado
+### V. Infraestructura documentada y costo acotado
 
-- Toda la infraestructura AWS MUST definirse en AWS CDK (TypeScript) y poder desplegarse y
-  destruirse de forma reproducible. No se permiten cambios manuales en la consola que no estén
-  reflejados en el código (excepto el arranque inicial de credenciales o DNS, documentado).
-- Todos los recursos se crean en una sola región (candidata `mx-central-1`, por confirmar con
-  pruebas de latencia), salvo los que AWS exige globales (p. ej. el certificado ACM de
-  CloudFront en `us-east-1`).
+- Toda la infraestructura AWS se crea desde la consola de AWS, y cada recurso MUST quedar
+  documentado en el repositorio (nombre, configuración relevante y pasos) con detalle suficiente
+  para recrearlo. No se usa AWS CDK. Un recurso sin documentar en el repo se considera defecto.
+- Todos los recursos se crean en una sola región: `us-east-1`.
 - MUST existir una regla de ciclo de vida que aborte las cargas multipart incompletas y una
   política de retención explícita para originales y derivados después del 2026-12-01.
 - Se dimensiona para un evento: S3 Standard, DynamoDB on-demand, una instancia EC2 pequeña detrás
@@ -125,13 +136,15 @@ cargos residuales.
 - **Backend:** Java con Spring Boot, build con Maven. Una sola aplicación que expone la API de
   invitados (estado de recepción, emisión de URLs prefirmadas, multipart, finalización) y la API
   de administración (login, listado, descarga, eliminación, cierre anticipado).
-- **Cómputo:** Amazon EC2 detrás de un Application Load Balancer con HTTPS (certificado ACM).
-  El ALB hace health checks contra un endpoint de salud de la aplicación.
+- **Cómputo:** Amazon EC2 detrás de un Application Load Balancer. Sin dominio propio ni certificado
+  ACM: el HTTPS lo termina CloudFront con su dominio, y el ALB escucha en HTTP:80 solo para
+  CloudFront. El ALB hace health checks contra un endpoint de salud de la aplicación.
 - **Front-ends:** dos aplicaciones Angular 21 independientes (invitados y novios), desplegadas
-  como sitios estáticos separados en S3 + CloudFront. No comparten despliegue ni rutas públicas.
+  por separado en AWS Amplify Hosting desde el repositorio, con despliegue en cada push. No
+  comparten despliegue ni rutas públicas.
 - **Datos:** Amazon S3 para los medios (bucket privado, organizado por evento) y Amazon DynamoDB
   para usuarios administradores, configuración del evento y metadatos de archivos.
-- **Infraestructura:** AWS CDK en TypeScript.
+- **Infraestructura:** consola de AWS en `us-east-1`, con cada recurso documentado en el repo.
 - **Repositorio:** monorepo con carpetas separadas para backend, cada front-end e infraestructura.
 - Agregar un lenguaje, framework o servicio AWS no listado aquí requiere justificarlo en el plan
   según el Principio I.
@@ -153,7 +166,8 @@ cargos residuales.
 - La lista de chequeo MUST ejecutarse completa en producción antes del 2026-11-19.
 - **Congelamiento:** del 2026-11-19 al 2026-11-22 solo se despliegan correcciones de defectos
   que impidan subir o consultar archivos.
-- Los commits son pequeños y descriptivos; `cdk diff` se revisa antes de cada `cdk deploy`.
+- Los commits son pequeños y descriptivos; los cambios de infraestructura se documentan
+  en el repo antes de aplicarlos en la consola.
 
 ## Governance
 
@@ -168,4 +182,4 @@ cargos residuales.
   `/speckit-analyze` se usa antes de implementar para detectar inconsistencias.
 - La fuente de requerimientos de negocio es `reqs/requerimientos_fotos_boda.md`.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-13 | **Last Amended**: 2026-11-13
+**Version**: 2.0.0 | **Ratified**: 2026-11-13 | **Last Amended**: 2026-11-13
