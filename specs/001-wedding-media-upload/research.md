@@ -201,8 +201,9 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
 - **Decision**: bucket privado de artefactos `boda-artefactos-248033171214` con versionado. La
   launch template (versión nueva) descarga `backend/app.jar` al arrancar y lo ejecuta como servicio
   `systemd` con el usuario `boda`. Auto Scaling group `boda-backend-asg` con mínimo, deseado y
-  máximo 1, en `us-east-1a` y `us-east-1b`, registrado en `boda-backend-tg`, health check ELB, 300
-  s de gracia. Desplegar = `mvn package` → `aws s3 cp` → *instance refresh* con
+  máximo 1, en `us-east-1a` y `us-east-1b`, registrado en `boda-backend-tg`, health check ELB, 600
+  s de gracia (el arranque de una instancia nueva tarda unos 4 minutos: `dnf update`, Java y el
+  `.jar`; con 300 s el ASG la daba por muerta antes de que terminara). Desplegar = `mvn package` → `aws s3 cp` → *instance refresh* con
   `MinHealthyPercentage=100` y `MaxHealthyPercentage=200` (levanta la nueva antes de apagar la
   vieja, sin corte). Volver atrás = restaurar la versión anterior del objeto en S3 y repetir el
   instance refresh.
