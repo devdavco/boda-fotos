@@ -82,17 +82,17 @@ public class VentanaRecepcion {
         return ahora.isAfter(aInstante(evento.disponibleHastaLocal()));
     }
 
-    static Instant apertura(Evento evento) {
+    public static Instant apertura(Evento evento) {
         return aInstante(evento.aperturaLocal());
     }
 
     /** Cierre programado, sin tener en cuenta el anticipado. */
-    static Instant cierre(Evento evento) {
+    public static Instant cierre(Evento evento) {
         return aInstante(evento.cierreLocal());
     }
 
     /** Cierre efectivo: el anticipado si existe y es anterior al programado (FR-015, FR-029). */
-    static Instant cierreEfectivo(Evento evento) {
+    public static Instant cierreEfectivo(Evento evento) {
         Instant programado = cierre(evento);
         Instant anticipado = evento.cierreAnticipadoEn();
         return anticipado != null && anticipado.isBefore(programado) ? anticipado : programado;
