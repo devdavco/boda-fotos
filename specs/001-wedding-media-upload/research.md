@@ -20,9 +20,17 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   rewrite no se comporta bien (ver R2 y riesgo K2 del plan): cambiar la URL base del API en los
   front-ends y habilitar CORS en Spring para los dos dominios de Amplify. Como la autenticación usa
   un encabezado `Authorization` (R6) y no cookies, el plan B no rompe el login.
-- **Por verificar el día 1**: que el proxy de Amplify reenvíe `POST`, `DELETE`, el cuerpo JSON,
-  el encabezado `Authorization` y el encabezado `X-Sesion-Subida`, y que devuelva los códigos de
-  error del backend sin reescribirlos.
+- **Verificado el 2026-11-14** (spike de R1, T023, con el backend mínimo, a través de
+  `https://david-release.d2x2ckep95pz3x.amplifyapp.com`):
+  - `GET /api/recepcion/estado`: 200, el mismo JSON que por CloudFront.
+  - `POST` y `DELETE` al mismo path: 405 generado por Spring, es decir, ambos métodos atraviesan
+    el rewrite y llegan al backend.
+  - Una ruta de Angular (que no es un archivo): 200 con `index.html`, así que la regla de SPA
+    funciona.
+  - Plan B **no** activado.
+- **Pendiente** (T052, con los endpoints reales): que el proxy reenvíe el cuerpo JSON y los
+  encabezados `Authorization` y `X-Sesion-Subida`, y que devuelva los códigos de error del backend
+  sin reescribirlos. Si algo falla, se activa el plan B.
 
 ## R2. Cómo se transfieren los archivos
 
@@ -58,9 +66,36 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   verificar la firma del formato (JPEG `FF D8 FF`, PNG `89 50 4E 47`, WEBP `RIFF....WEBP`, HEIC,
   MP4 y MOV con caja `ftyp`). Si no coincide, borra el objeto y rechaza (edge case "contenido
   declarado inconsistente").
-- **Por verificar el día 1**: si `S3Presigner` incluye `Content-Length` en los encabezados firmados
-  cuando se fija en el `PutObjectRequest`. Si lo incluye, S3 rechaza cualquier tamaño distinto
-  desde el primer byte. Si no, el control queda solo en la finalización (ya diseñado así).
+- **Verificado el 2026-11-14** (spike de R2, T028; pantalla `#spike` con `XMLHttpRequest`, URLs
+  prefirmadas generadas en CloudShell con `boto3` contra el endpoint regional
+  `s3.us-east-1.amazonaws.com`; el CORS de `boda-fotos-2026` permite `PUT` desde el dominio de
+  Amplify):
+
+  | Dispositivo y red | Prueba | Resultado |
+  | --- | --- | --- |
+  | iPhone, Vivaldi (motor WebKit), WiFi | `PUT` de 3,3 MB | HTTP 200 en 1,3 s; `ETag` legible desde JavaScript; tipo reportado `image/jpeg` |
+  | iPhone, Vivaldi, 4G | `PUT` de 2,5 MB | HTTP 200 en 2,3 s; `ETag` legible |
+  | iPhone, Vivaldi, 4G | URL firmada con `ContentLength=50000` y archivo de 2,5 MB | HTTP 403 `SignatureDoesNotMatch` |
+  | iPhone, Safari | — | **Pendiente**: lista de chequeo, `quickstart.md` §4.1 |
+  | Android, Chrome | — | **Pendiente**: lista de chequeo, `quickstart.md` §4.1 |
+
+  Conclusiones:
+  - El `PUT` directo con `XMLHttpRequest` funciona por 4G y el `ETag` es legible, así que el CORS
+    (`ExposeHeaders: ETag`) cumple lo que el multipart necesita.
+  - SC-003 se cumple con margen: 2,5 MB en 2,3 s por 4G. Extrapolando linealmente (estimación, no
+    medición), una foto de 10 MB tardaría unos 9 s, por debajo de los 15 s.
+  - **Decisión: el backend firma `Content-Length` con el tamaño declarado** (además del
+    `Content-Type`). S3 rechaza con 403 cualquier cuerpo de otro tamaño desde el primer byte, así
+    que no se puede subir más de lo autorizado con una URL válida. La verificación con
+    `HeadObject` al completar se mantiene como segunda barrera. El navegador no necesita enviar
+    nada especial: calcula `Content-Length` a partir del archivo.
+  - **Por confirmar al implementar `AlmacenamientoS3` (T040)**: el spike usó el firmador de
+    `boto3`. Hay que repetir la comprobación con `S3Presigner` del AWS SDK for Java v2 (que el
+    `PutObjectRequest` con `contentLength` lo firme y que `signedHeaders()` lo incluya). En
+    multipart se haría igual por parte (10 MiB; la última, el resto); también por confirmar.
+  - **Consecuencia para el reintento**: un 403 en un `PUT` ahora puede ser URL vencida **o** tamaño
+    distinto del firmado. El front reintenta con una URL nueva **una sola vez** por archivo o
+    parte; si vuelve a dar 403, lo marca como fallido en vez de repetir en bucle.
 - **Nota de permisos**: sin `s3:ListBucket`, `HeadObject` sobre una clave inexistente devuelve 403
   en vez de 404. El backend trata ambos como "no existe" y no se agrega `ListBucket`.
 
@@ -299,8 +334,9 @@ systemctl enable --now boda
   - El tipo se deduce de la **extensión** cuando el navegador entrega `file.type` vacío (pasa con
     HEIC y MOV en Android). El `Content-Type` firmado sale de la tabla del backend, no del
     navegador.
-  - Progreso con `HttpClient` de Angular (`reportProgress`, usa XHR); `fetch` no informa progreso
-    de subida.
+  - Progreso con `XMLHttpRequest` directo (`xhr.upload.onprogress`), como en el spike de R2
+    (T027, verificado en iPhone por WiFi y 4G); `fetch` no informa el progreso de subida. Los
+    `PUT` a S3 no pasan por `HttpClient`; el resto de las llamadas al API sí.
   - Hasta 3 archivos en paralelo; los fallidos quedan en la lista con botón "Reintentar
     fallidos".
   - Mensaje visible mientras sube: "Mantén esta pantalla abierta hasta que terminen las
@@ -308,6 +344,18 @@ systemctl enable --now boda
     lo resuelve.
   - En la vista completa del front de novios, HEIC y algunos MOV (HEVC) no se ven en Chrome de
     escritorio: se muestra el ícono y el botón de descarga.
+  - **Observado en el spike (2026-11-14)**: un iPhone (Vivaldi, motor WebKit) entrega las fotos
+    HEIC al navegador **ya convertidas a JPEG**, con `file.type = image/jpeg`. Entonces las fotos
+    del iPhone llegan como JPEG y el caso HEIC real queda para archivos que no pasan por el
+    selector de fotos de iOS.
+  - **Por verificar con el nombre del archivo**: el servidor decide el formato por la extensión y
+    rechaza si el tipo declarado la contradice (`TIPO_NO_PERMITIDO`). Si iOS entrega un JPEG con
+    nombre `.heic`, esas fotos se rechazarían por error. El spike muestra el nombre del archivo:
+    anotarlo en la lista de chequeo (§4.1). Si conserva `.heic`, el front debe deducir el formato
+    por el contenido (`file.type`) y enviar al servidor el nombre y la extensión coherentes, o el
+    servidor debe aceptar `image/jpeg` con extensión `.heic` y verificar por la firma de bytes.
+  - Vivaldi en iOS usa el motor de WebKit como todos los navegadores de iOS, pero no es Safari: la
+    verificación en Safari y en Android/Chrome queda para la lista de chequeo (§4.1).
 - **Rationale**: son las fallas típicas de subidas desde el navegador del celular. Se descubren
   solo con dispositivos reales, por eso van en la verificación del día 1–2 (quickstart).
 
