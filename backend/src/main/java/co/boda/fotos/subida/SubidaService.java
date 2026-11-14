@@ -15,11 +15,15 @@ import co.boda.fotos.error.ApiException;
 import co.boda.fotos.error.CodigoError;
 import co.boda.fotos.recepcion.Evento;
 import co.boda.fotos.recepcion.VentanaRecepcion;
+import co.boda.fotos.subida.AlmacenamientoS3.Objeto;
+import co.boda.fotos.subida.AlmacenamientoS3.ParteSubida;
 import co.boda.fotos.subida.AlmacenamientoS3.UrlSubida;
 import co.boda.fotos.subida.ArchivoMultimedia.Estado;
 import co.boda.fotos.subida.ArchivoMultimedia.Modo;
 
 import org.springframework.stereotype.Service;
+
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Autoriza las subidas de los invitados (Principio III: el servidor es la autoridad). Antes de
@@ -48,6 +52,14 @@ public class SubidaService {
             Long tamano,
             Boolean conMiniatura,
             Long tamanoMiniatura) {
+    }
+
+    /** Parte de un multipart ya subida, con el {@code ETag} que devolvió S3. */
+    public record ParteCompletada(Integer numero, String etag) {
+    }
+
+    /** Cuerpo de {@code POST /api/subidas/{archivoId}/completar}. */
+    public record PeticionCompletar(List<ParteCompletada> partes, Boolean miniaturaSubida) {
     }
 
     private final SesionSubidaService sesiones;
@@ -207,6 +219,130 @@ public class SubidaService {
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("urls", urls);
         respuesta.put("expiraEn", ventana.ahora().plus(vigencia).toString());
+        return respuesta;
+    }
+
+    /**
+     * Cierra la subida de un archivo (FR-016): exige la recepción abierta, completa el multipart si
+     * corresponde, verifica en S3 el tamaño, el tipo y la firma de bytes de lo que llegó y recién
+     * entonces lo pasa a {@code COMPLETADO} (entra a la galería). Es idempotente.
+     *
+     * @throws ApiException {@code SUBIDA_INCOMPLETA} (409, reintentable) si el objeto o alguna
+     *     parte no está en S3; {@code CONTENIDO_INCONSISTENTE} (422) si lo subido no coincide con
+     *     lo autorizado, en cuyo caso se borra el objeto
+     */
+    public Map<String, Object> completar(String token, String archivoId, PeticionCompletar peticion) {
+        SesionSubida sesion = sesiones.requerir(token);
+        ArchivoMultimedia archivo = archivos.buscar(archivoId)
+                .filter(a -> a.sesionId().equals(sesion.token()))
+                .orElseThrow(() -> new ApiException(CodigoError.NO_ENCONTRADO));
+        if (archivo.estado() == Estado.COMPLETADO) {
+            return resultado(archivo);
+        }
+        if (archivo.estado() != Estado.PENDIENTE) {
+            throw new ApiException(CodigoError.NO_ENCONTRADO);
+        }
+        ventana.requireAbierta();
+
+        if (archivo.modo() == Modo.MULTIPART) {
+            completarMultipart(archivo, peticion);
+        }
+
+        Objeto objeto = almacenamiento
+                .inspeccionar(archivo.claveS3())
+                .orElseThrow(() -> new ApiException(CodigoError.SUBIDA_INCOMPLETA));
+        if (objeto.bytes() != archivo.tamano()
+                || objeto.contentType() == null
+                || !objeto.contentType().equalsIgnoreCase(archivo.contentType())
+                || !archivo.formato().firmaCoincide(almacenamiento.leerCabecera(archivo.claveS3()))) {
+            rechazarContenido(archivo);
+        }
+
+        boolean miniaturaSubida = peticion != null && Boolean.TRUE.equals(peticion.miniaturaSubida());
+        String claveMiniatura = miniaturaSubida ? verificarMiniatura(archivo) : null;
+        archivos.completar(archivo, ventana.ahora(), claveMiniatura);
+        return resultado(archivo);
+    }
+
+    /**
+     * El invitado quita de su lista un archivo pendiente: aborta el multipart o borra el objeto
+     * (y su miniatura) y marca el archivo {@code DESCARTADO}. El cupo de la sesión no se devuelve.
+     */
+    public void cancelar(String token, String archivoId) {
+        ArchivoMultimedia archivo = pendienteDeLaSesion(token, archivoId);
+        if (archivo.modo() == Modo.MULTIPART) {
+            almacenamiento.abortarMultipart(archivo.claveS3(), archivo.uploadId());
+        } else {
+            almacenamiento.borrar(archivo.claveS3());
+        }
+        almacenamiento.borrar(almacenamiento.claveMiniatura(archivo.photoId()));
+        archivos.descartar(archivo.photoId());
+    }
+
+    private void completarMultipart(ArchivoMultimedia archivo, PeticionCompletar peticion) {
+        List<ParteCompletada> partes = peticion == null ? null : peticion.partes();
+        int esperadas = archivo.numeroPartes();
+        boolean validas = partes != null
+                && partes.size() == esperadas
+                && partes.stream().allMatch(p -> p != null && p.numero() != null && p.etag() != null && !p.etag().isBlank())
+                && partes.stream().map(ParteCompletada::numero).distinct().count() == esperadas
+                && partes.stream().allMatch(p -> p.numero() >= 1 && p.numero() <= esperadas);
+        if (!validas) {
+            throw new ApiException(CodigoError.PETICION_INVALIDA);
+        }
+        try {
+            almacenamiento.completarMultipart(
+                    archivo.claveS3(),
+                    archivo.uploadId(),
+                    partes.stream().map(p -> new ParteSubida(p.numero(), p.etag())).toList());
+        } catch (S3Exception e) {
+            String codigo = e.awsErrorDetails() == null ? "" : e.awsErrorDetails().errorCode();
+            switch (codigo) {
+                // NoSuchUpload: el multipart ya se completó en un intento anterior; la
+                // verificación del objeto decide si todo está bien.
+                case "NoSuchUpload" -> { }
+                case "InvalidPart", "InvalidPartOrder", "EntityTooSmall" ->
+                        throw new ApiException(CodigoError.SUBIDA_INCOMPLETA);
+                default -> throw e;
+            }
+        }
+    }
+
+    /** Borra lo subido y descarta el archivo: no coincide con lo que se autorizó. */
+    private void rechazarContenido(ArchivoMultimedia archivo) {
+        almacenamiento.borrar(archivo.claveS3());
+        almacenamiento.borrar(almacenamiento.claveMiniatura(archivo.photoId()));
+        archivos.descartar(archivo.photoId());
+        throw new ApiException(CodigoError.CONTENIDO_INCONSISTENTE);
+    }
+
+    /**
+     * La miniatura nunca hace fallar la subida: si no está, pesa más de 1 MB, no es JPEG o su firma
+     * no coincide, se borra y el archivo queda sin miniatura.
+     *
+     * @return la clave de la miniatura verificada, o {@code null}
+     */
+    private String verificarMiniatura(ArchivoMultimedia archivo) {
+        String clave = almacenamiento.claveMiniatura(archivo.photoId());
+        Objeto objeto = almacenamiento.inspeccionar(clave).orElse(null);
+        if (objeto == null) {
+            return null;
+        }
+        boolean valida = objeto.bytes() >= 1
+                && objeto.bytes() <= propiedades.limites().miniaturaMaxBytes()
+                && TIPO_MINIATURA.equalsIgnoreCase(objeto.contentType())
+                && FormatoArchivo.JPG.firmaCoincide(almacenamiento.leerCabecera(clave));
+        if (!valida) {
+            almacenamiento.borrar(clave);
+            return null;
+        }
+        return clave;
+    }
+
+    private static Map<String, Object> resultado(ArchivoMultimedia archivo) {
+        Map<String, Object> respuesta = new LinkedHashMap<>();
+        respuesta.put("archivoId", archivo.photoId());
+        respuesta.put("estado", Estado.COMPLETADO.name());
         return respuesta;
     }
 
