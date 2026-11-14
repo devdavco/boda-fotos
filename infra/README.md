@@ -8,7 +8,7 @@ defecto.
 - Cuenta: `248033171214`
 - Región: `us-east-1` (todo, salvo lo que AWS maneja como global: IAM y CloudFront).
 - Tag obligatorio en todos los recursos: `proyecto=boda`.
-- Última actualización: 2026-11-13.
+- Última actualización: 2026-11-14.
 
 ## Arquitectura
 
@@ -34,42 +34,59 @@ Los archivos nunca pasan por CloudFront, el ALB ni la EC2: van directo entre el 
 | Recurso | Nombre | Estado |
 | --- | --- | --- |
 | Bucket S3 de medios | `boda-fotos-2026` | Creado |
-| Tabla DynamoDB | `boda-fotos` | Creada (diseño final según el plan) |
-| Rol IAM del backend | `boda-ec2-role` | Creado (se ampliará según el plan) |
-| Security groups | `boda-alb-sg`, `boda-app-sg` | Creados |
-| Launch template | `boda-backend-lt` (v2) | Creada |
-| Target group | `boda-backend-tg` | Creado, sin instancias |
+| Bucket S3 de artefactos | `boda-artefactos-248033171214` | Creado (§13), con el `.jar` mínimo del backend |
+| Tabla DynamoDB | `boda-fotos` | Creada, con el índice `galeria-index` y PITR (§3) |
+| Tablas DynamoDB | `boda-evento`, `boda-admins`, `boda-sesiones` | Creadas (§3) |
+| Ítem del evento | `boda-2026` en `boda-evento` | Creado (§3) |
+| Política IAM | `boda-backend-policy` | v3 aplicada (§4) |
+| Rol IAM del backend | `boda-ec2-role` | Creado, con la política v3 |
+| Security groups | `boda-alb-sg`, `boda-app-sg` | Creados; `boda-app-sg` corregido el 2026-11-14 (§5) |
+| Launch template | `boda-backend-lt` | v3 por defecto (§6) |
+| Target group | `boda-backend-tg` | Creado, con la instancia del ASG (§7) |
 | ALB | `boda-alb` | Creado |
 | CloudFront | `boda-cf` | Creado |
+| Auto Scaling del backend | `boda-backend-asg` | Creado, 1/1/1 (§14) |
 | SNS | `boda-alertas` | Creado |
 | Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Creadas, acciones desactivadas |
 | Presupuesto | `boda-presupuesto` | Creado |
-| Auto Scaling del backend | — | Pendiente (falta el .jar) |
-| Apps de Amplify | — | Pendiente (faltan los front-ends) |
+| App de Amplify de invitados | `boda-invitados` | Creada, rama `david/release` (§11) |
+| App de Amplify de novios | `boda-novios` | Pendiente (hasta que exista `front-novios/`) |
+
+El `.jar` que corre hoy es el **esqueleto del backend** (`/actuator/health` y un
+`GET /api/recepcion/estado` de respuesta fija). El backend completo lo reemplaza con el
+procedimiento de §13.
 
 Valores que usan las aplicaciones:
 
 - URL del API: `https://ddl2si3h6lu7z.cloudfront.net/api/...`
 - `AWS_REGION=us-east-1`
 - `S3_BUCKET=boda-fotos-2026`
+- `EVENT_ID=boda-2026`
+- `DYNAMODB_TABLE_PHOTOS=boda-fotos`, `DYNAMODB_TABLE_EVENT=boda-evento`,
+  `DYNAMODB_TABLE_ADMINS=boda-admins`, `DYNAMODB_TABLE_SESSIONS=boda-sesiones`
+
+El backend recibe estos valores como variables de entorno desde `boda.service` (user data de §6).
 
 ## Orden para recrear desde cero
 
 Los recursos dependen unos de otros. Si hay que recrear todo, seguir este orden:
 
-1. Seguridad de la cuenta y presupuesto
-2. Bucket S3
-3. Tabla DynamoDB
-4. Política y rol IAM
-5. Security groups (primero el del ALB)
-6. Launch template
-7. Target group
-8. ALB y su regla
-9. CloudFront
-10. Restringir el security group del ALB a CloudFront
-11. CORS del bucket (necesita los dominios de CloudFront y Amplify)
-12. SNS y alarmas
-
+1. Seguridad de la cuenta y presupuesto (§1)
+2. Bucket S3 de medios (§2)
+3. Tablas DynamoDB, índice e ítem del evento (§3)
+4. Bucket de artefactos (§13)
+5. Política y rol IAM (§4)
+6. Security groups (§5; primero el del ALB)
+7. Target group (§7)
+8. ALB y su regla (§8)
+9. CloudFront (§9)
+10. Restringir el security group del ALB a CloudFront (§10)
+11. Subir el `.jar` al bucket de artefactos (§13); **antes** de la launch template y del ASG
+12. Launch template (§6)
+13. Auto Scaling group (§14)
+14. App de Amplify de invitados (§11); **recrearla cambia el dominio del QR**
+15. CORS del bucket (§2; necesita el dominio de Amplify)
+16. SNS y alarmas (§12)
 ---
 
 ## 1. Seguridad de la cuenta y presupuesto
@@ -93,23 +110,30 @@ Consola: S3 → Create bucket.
 
 ### CORS
 
-Permissions → Cross-origin resource sharing. Debe incluir el dominio de Amplify de invitados
-cuando exista. `http://localhost:4200` se quita antes del 2026-11-19.
+Permissions → Cross-origin resource sharing. Solo la página de invitados sube desde el navegador a
+S3 con `PUT`; la galería de los novios muestra y descarga con `<img>`, `<video>` y enlaces directos,
+que no necesitan CORS, y por eso su dominio no se agrega. `http://localhost:4200` es para
+`ng serve` y se quita antes del 2026-11-19. Valor vigente desde el 2026-11-14:
 
 ```json
 [
   {
     "AllowedOrigins": [
-      "https://ddl2si3h6lu7z.cloudfront.net",
+      "https://david-release.d2x2ckep95pz3x.amplifyapp.com",
       "http://localhost:4200"
     ],
-    "AllowedMethods": ["PUT", "GET"],
+    "AllowedMethods": ["PUT"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3000
   }
 ]
 ```
+
+`ExposeHeaders: ETag` es necesario: en las subidas multipart el navegador lee el `ETag` de cada
+parte para completar la carga. Ya no están el dominio de CloudFront (ninguna página se sirve desde
+ahí) ni el método `GET`. Si el front de novios llegara a descargar con `fetch`, habría que agregar
+`GET` para su dominio.
 
 ### Lifecycle
 
@@ -137,62 +161,151 @@ aws s3api put-bucket-lifecycle-configuration \
   --lifecycle-configuration file://lifecycle.json
 ```
 
-## 3. Tabla DynamoDB: `boda-fotos`
+## 3. Tablas DynamoDB
+
+Todas en `us-east-1`, con el tag `proyecto=boda`, capacity mode **On-demand**, *deletion protection*
+activado y cifrado por defecto (*Owned by Amazon DynamoDB*). El diseño de los atributos está en
+`specs/001-wedding-media-upload/data-model.md`. El navegador nunca accede a DynamoDB: solo el rol
+`boda-ec2-role` del backend.
 
 Consola: DynamoDB → Create table → Customize settings.
 
-- Partition key: `photoId` (String). Sin sort key.
-- Table class: DynamoDB Standard.
-- Capacity mode: On-demand.
-- Encryption: *Owned by Amazon DynamoDB*.
-- Deletion protection: activado.
-- Point-in-time recovery: activar antes del 2026-11-19.
+| Tabla | Partition key | Otros ajustes |
+| --- | --- | --- |
+| `boda-fotos` | `photoId` (String), sin sort key | Índice `galeria-index`; PITR activado |
+| `boda-evento` | `eventoId` (String), sin sort key | PITR activado |
+| `boda-admins` | `usuario` (String), sin sort key | PITR activado |
+| `boda-sesiones` | `id` (String), sin sort key | **TTL** sobre el atributo `expiraEnEpoch`; sin PITR (datos efímeros) |
 
-El diseño definitivo (administradores, configuración del evento, sesiones de subida, metadatos)
-sale del plan técnico. Cada tabla nueva se agrega a esta sección.
+Table class: DynamoDB Standard en las cuatro. En la consola, el point-in-time recovery está en la
+pestaña *Backups* de cada tabla.
+
+### Índice `galeria-index` en `boda-fotos`
+
+DynamoDB → `boda-fotos` → Indexes → Create index.
+
+- Partition key `galeriaEvento` (String); sort key `galeriaOrden` (String).
+- Projection: *All*.
+- Es un índice **disperso**: solo contiene los archivos `COMPLETADO`, porque esos dos atributos se
+  quitan al eliminar un archivo. La galería de los novios sale de un `Query` sobre este índice,
+  ordenado de más reciente a más antiguo, sin `Scan`.
+
+### Ítem del evento `boda-2026` en `boda-evento`
+
+Tiene la ventana de recepción, los topes por sesión y los contadores. Se creó desde CloudShell con
+(la fecha y la hora están en hora de Cali; el backend las convierte con `America/Bogota`):
+
+```bash
+aws dynamodb put-item --table-name boda-evento \
+  --condition-expression "attribute_not_exists(eventoId)" \
+  --item '{
+    "eventoId": {"S": "boda-2026"},
+    "nombre": {"S": "Boda de Mara y Daniel"},
+    "fechaBoda": {"S": "2026-11-21"},
+    "zonaHoraria": {"S": "America/Bogota"},
+    "aperturaLocal": {"S": "2026-11-19T00:00"},
+    "cierreLocal": {"S": "2026-11-22T12:00"},
+    "disponibleHastaLocal": {"S": "2026-12-01T23:59:59"},
+    "maxArchivosPorSesion": {"N": "300"},
+    "maxBytesPorSesion": {"N": "5368709120"},
+    "archivosTotal": {"N": "0"},
+    "fotos": {"N": "0"},
+    "videos": {"N": "0"}
+  }'
+```
+
+- Cambiar una fecha o un tope es editar este ítem en la consola; no hace falta desplegar.
+- El cierre anticipado agrega `cierreAnticipadoEn` (UTC) y `cierreAnticipadoPor`. Para probar y
+  restaurar la ventana, ver `specs/001-wedding-media-upload/quickstart.md` §4.9.
+
+### Pendiente
+
+Las cuentas de los novios (`mara` y `daniel`) se crean en `boda-admins` cuando exista el comando
+`hash-contrasena` del backend; el procedimiento se agrega aquí entonces.
 
 ## 4. IAM
 
-### Política `boda-backend-policy`
+### Política `boda-backend-policy` (versión v3)
 
-IAM → Policies → Create policy → JSON. Se ampliará según el plan (por ejemplo `s3:DeleteObject`,
-`s3:AbortMultipartUpload`, más tablas y parámetros de SSM).
+IAM → Policies → `boda-backend-policy` → Edit → JSON. La v3 es la que dejó el plan técnico: limita
+S3 al prefijo del evento, agrega el borrado y el aborto de multipart, el bucket de artefactos y las
+tablas nuevas, y **quita `dynamodb:Scan`**.
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "S3Fotos",
+      "Sid": "S3MediosEvento",
       "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::boda-fotos-2026/*"
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::boda-fotos-2026/eventos/boda-2026/*"
+    },
+    {
+      "Sid": "S3Artefactos",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::boda-artefactos-248033171214/backend/*"
     },
     {
       "Sid": "DynamoFotos",
       "Effect": "Allow",
-      "Action": [
-        "dynamodb:PutItem",
-        "dynamodb:GetItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:Query",
-        "dynamodb:Scan"
-      ],
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"],
       "Resource": [
         "arn:aws:dynamodb:us-east-1:248033171214:table/boda-fotos",
-        "arn:aws:dynamodb:us-east-1:248033171214:table/boda-fotos/index/*"
+        "arn:aws:dynamodb:us-east-1:248033171214:table/boda-fotos/index/galeria-index"
       ]
+    },
+    {
+      "Sid": "DynamoEventoYAdmins",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:248033171214:table/boda-evento",
+        "arn:aws:dynamodb:us-east-1:248033171214:table/boda-admins"
+      ]
+    },
+    {
+      "Sid": "DynamoSesiones",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"],
+      "Resource": "arn:aws:dynamodb:us-east-1:248033171214:table/boda-sesiones"
     }
   ]
 }
 ```
+
+Cada operación del backend y la acción que la cubre:
+
+| Operación del diseño | Acción IAM |
+| --- | --- |
+| `PUT` simple prefirmado (original y miniatura) | `s3:PutObject` |
+| `CreateMultipartUpload`, `UploadPart` prefirmado, `CompleteMultipartUpload` | `s3:PutObject` |
+| `HeadObject` y `GetObject` con `Range` al completar; `GET` prefirmado de galería, vista y descarga | `s3:GetObject` |
+| Borrar un objeto que no coincide o llegó tras el cierre, cancelación del invitado, eliminación de los novios (original y miniatura) | `s3:DeleteObject` |
+| Abortar el multipart rechazado o cancelado | `s3:AbortMultipartUpload` |
+| Descargar el `.jar` al arrancar | `s3:GetObject` en `boda-artefactos-…/backend/*` |
+| Autorizar (crear ítem), completar, descartar y eliminar archivos (con transacción) | `dynamodb:PutItem`, `dynamodb:UpdateItem` en `boda-fotos` |
+| Leer un archivo; galería paginada | `dynamodb:GetItem` en `boda-fotos`; `dynamodb:Query` en `galeria-index` |
+| Leer la ventana; contadores y cierre anticipado | `dynamodb:GetItem`, `dynamodb:UpdateItem` en `boda-evento` |
+| Login, intentos fallidos y bloqueo | `dynamodb:GetItem`, `dynamodb:UpdateItem` en `boda-admins` |
+| Sesiones de subida y de admin: crear, leer, contar, renovar y cerrar | `dynamodb:PutItem`, `GetItem`, `UpdateItem`, `DeleteItem` en `boda-sesiones` |
+
+- `s3:PutObject` cubre también `CreateMultipartUpload`, `UploadPart` y `CompleteMultipartUpload`, y
+  `s3:GetObject` cubre `HeadObject`.
+- Las transacciones (`TransactWriteItems`) se autorizan con `dynamodb:UpdateItem` de cada tabla; el
+  diseño no usa `ConditionCheck`, así que no hace falta `dynamodb:ConditionCheckItem`.
+- No se usan `s3:ListBucket`, `s3:ListMultipartUploadParts`, `dynamodb:Scan` ni KMS (el cifrado es
+  SSE-S3).
+- La creación de cuentas y del ítem del evento se hace desde CloudShell con el usuario de consola,
+  no con este rol.
 
 ### Rol `boda-ec2-role`
 
 IAM → Roles → Create role.
 
 - Trusted entity: AWS service → EC2.
-- Políticas: `boda-backend-policy` y `AmazonSSMManagedInstanceCore` (para entrar a la instancia con
+- Políticas: `boda-backend-policy` (v3) y `AmazonSSMManagedInstanceCore` (para entrar a la instancia con
   Session Manager, sin SSH).
 - Al crearlo desde la consola, AWS genera también el instance profile con el mismo nombre.
 
@@ -208,14 +321,15 @@ Al recrear: crearlo primero con HTTP 80 desde `0.0.0.0/0`, y restringirlo al pre
 CloudFront ya funcione (paso 10).
 
 ### `boda-app-sg`
-
-- Entrada: HTTP 80 y TCP 8080, ambos con origen `boda-alb-sg`.
+- Entrada: **solo TCP 8080**, con origen `boda-alb-sg`. No hay reglas para los puertos 80 ni 443.
 - Sin SSH (puerto 22).
 - Salida: la que viene por defecto. La instancia necesita salir a internet para hablar con S3,
   DynamoDB y SSM; no hay NAT Gateway porque usa subredes públicas.
+- Corregido el 2026-11-14: el grupo tenía reglas de entrada para los puertos 80 y 443 por error y el
+  ALB no llegaba a Spring Boot (puerto 8080). Si el target group muestra `unhealthy` con `Request
+  timed out`, revisar primero esta regla.
 
-## 6. Launch template `boda-backend-lt` (versión 2, por defecto)
-
+## 6. Launch template `boda-backend-lt` (versión 3, por defecto)
 - AMI: Amazon Linux 2023, 64-bit x86.
 - Tipo: `t3.micro`.
 - Key pair: ninguno.
@@ -223,22 +337,60 @@ CloudFront ya funcione (paso 10).
 - Security group: `boda-app-sg`.
 - IAM instance profile: `boda-ec2-role`.
 - Tags de recursos: `proyecto=boda` en instancias y volúmenes.
-- User data:
-
+- Versiones: la v2 solo instalaba Java. La **v3** (por defecto desde el 2026-11-14) descarga el
+  `.jar` de `s3://boda-artefactos-248033171214/backend/app.jar` y lo arranca como servicio
+  `systemd` (`boda.service`). Para cambiar la user data se crea una versión nueva y se marca como
+  por defecto; el ASG usa siempre la versión por defecto.
+- User data (v3):
 ```bash
 #!/bin/bash
+set -euo pipefail
 dnf update -y
 dnf install -y java-25-amazon-corretto-headless
+id boda >/dev/null 2>&1 || useradd --system --no-create-home --shell /sbin/nologin boda
+mkdir -p /opt/boda
+aws s3 cp s3://boda-artefactos-248033171214/backend/app.jar /opt/boda/app.jar --region us-east-1
+chown -R boda:boda /opt/boda
+cat > /etc/systemd/system/boda.service <<'EOF'
+[Unit]
+Description=Backend boda (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=boda
+WorkingDirectory=/opt/boda
+Environment=AWS_REGION=us-east-1
+Environment=S3_BUCKET=boda-fotos-2026
+Environment=EVENT_ID=boda-2026
+Environment=DYNAMODB_TABLE_PHOTOS=boda-fotos
+Environment=DYNAMODB_TABLE_EVENT=boda-evento
+Environment=DYNAMODB_TABLE_ADMINS=boda-admins
+Environment=DYNAMODB_TABLE_SESSIONS=boda-sesiones
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/boda/app.jar
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now boda
 ```
-
-Pendiente: agregar al user data la descarga y el arranque del .jar, cuando se defina cómo llega a
-la instancia.
-
+- El arranque de una instancia nueva tarda unos 4 minutos (`dnf update`, Java y el `.jar`); por eso
+  el ASG usa una gracia de health check de 600 s (§14).
+- La user data usa `set -euo pipefail`: si `backend/app.jar` no existe en el bucket, el servicio no
+  arranca, la instancia nunca queda sana y el ASG la reemplaza en bucle. Por eso el `.jar` se sube
+  **antes** de crear el ASG (§13).
+- Revisar una instancia: Session Manager → `sudo journalctl -u boda -n 100` y
+  `sudo tail -n 100 /var/log/cloud-init-output.log`.
 ## 7. Target group `boda-backend-tg`
 
 - Target type: Instances. Protocolo HTTP, puerto 8080. VPC por defecto.
-- Health check: HTTP, ruta `/actuator/health`.
-- Sin targets registrados a mano: los registra el Auto Scaling.
+- Health check: HTTP, ruta `/actuator/health`, **intervalo de 15 s** y **healthy threshold 2**; los
+  demás valores, por defecto. Con esto una instancia nueva queda sana unos 30 s después de que
+  Spring Boot responde.
+- Sin targets registrados a mano: los registra el Auto Scaling (§14).
 
 ## 8. ALB `boda-alb`
 
@@ -272,15 +424,48 @@ Dominio: `https://ddl2si3h6lu7z.cloudfront.net`
 En `boda-alb-sg`, reemplazar las reglas de entrada abiertas por una sola: HTTP 80 desde el prefix
 list `com.amazonaws.global.cloudfront.origin-facing`.
 
-## 11. Amplify (pendiente)
+## 11. Amplify Hosting
 
-Dos apps desde este repositorio, una por front-end, con despliegue en cada push. En cada una:
+Dos apps desde este repositorio (`devdavco/boda-fotos`), una por front-end, con despliegue en cada
+push a la rama **`david/release`**. Se trabaja en ramas `david/...` y solo lo que está listo se
+mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones críticas (plan,
+"Ramas y despliegue de los front-ends"). El monorepo se construye con el `amplify.yml` de la raíz.
 
-- Rewrite `/api/<*>` → `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` (tipo 200, reverse proxy),
-  para que el front llame a `/api` en su propio dominio y no necesite CORS.
-- Rewrite de SPA para que las rutas de Angular resuelvan a `index.html`.
+### `boda-invitados` (creada el 2026-11-14)
 
-Al crearlas, agregar aquí sus dominios y añadir el de invitados al CORS del bucket.
+- Repositorio `devdavco/boda-fotos`, rama `david/release`, monorepo con la carpeta
+  `front-invitados` (`AMPLIFY_MONOREPO_APP_ROOT=front-invitados`).
+- Build: *Standard build*. Amplify creó el *service role* de la app.
+- Tag: `proyecto=boda`.
+- **Dominio: `https://david-release.d2x2ckep95pz3x.amplifyapp.com`**. Es la **URL del QR**. El
+  subdominio sale del nombre de la rama y del identificador de la app, así que **no se recrea la
+  app, no se renombra la rama `david/release` y no se desconecta la rama** (riesgo K6 del plan): el
+  QR impreso dejaría de funcionar.
+- Rewrites (Hosting → Rewrites and redirects), en este orden:
+
+| Origen | Destino | Tipo |
+| --- | --- | --- |
+| `/api/<*>` | `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` | 200 (Rewrite) |
+| `</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>` | `/index.html` | 200 (Rewrite) |
+
+  La primera regla hace que el front llame a `/api/...` en su propio dominio y no necesite CORS. La
+  segunda es la de SPA: las rutas de Angular resuelven a `index.html` y los archivos con extensión
+  conocida (`.js`, `.css`, imágenes, etc.) se sirven tal cual.
+- Verificación del *spike* de R1 (2026-11-14, con el backend mínimo):
+  - `GET /api/recepcion/estado` por el dominio de Amplify: 200, el mismo JSON que por CloudFront.
+  - `POST` y `DELETE` al mismo path: 405 **generado por Spring**, lo que prueba que ambos métodos
+    atraviesan el rewrite y llegan al backend.
+  - Rutas de Angular (rutas que no son un archivo): 200 con `index.html`.
+  - **Pendiente** (tarea T052): reenvío del cuerpo JSON y de los encabezados `Authorization` y
+    `X-Sesion-Subida`, que solo se puede probar con los endpoints reales. Si algo no se reenvía,
+    plan B de R1 (llamar directo a CloudFront con CORS en Spring).
+
+### `boda-novios` (pendiente)
+
+Igual que la anterior, con la carpeta `front-novios` (`AMPLIFY_MONOREPO_APP_ROOT=front-novios`) y
+sus propios rewrites. Se crea cuando exista `front-novios/` en `david/release`; con la carpeta
+ausente su primer build falla. Al crearla, anotar aquí su dominio. Su dominio **no** va en el CORS
+del bucket.
 
 ## 12. Monitoreo (FR-030a)
 
@@ -355,13 +540,79 @@ Activar ambas cuando el backend esté desplegado y sano:
 aws cloudwatch enable-alarm-actions --alarm-names boda-backend-sin-salud boda-api-errores-5xx
 ```
 
-## Pendientes
+## 13. Bucket de artefactos y despliegue del backend
 
-- Auto Scaling del backend (1 instancia) con `boda-backend-lt` y `boda-backend-tg`, y definir cómo
-  llega el .jar a la instancia.
-- Activar las acciones de las alarmas.
-- Apps de Amplify y su dominio en el CORS del bucket.
-- Ampliar la política IAM y crear las tablas de DynamoDB según el plan.
-- Antes del 2026-11-19: quitar `localhost` del CORS, activar point-in-time recovery y ejecutar la
-  lista de chequeo manual en celulares reales.
+### Bucket `boda-artefactos-248033171214`
+
+Consola: S3 → Create bucket.
+- Región `us-east-1`. Tag `proyecto=boda`.
+- Object Ownership: *ACLs disabled*.
+- Block all public access: activado.
+- Versioning: **activado** (permite volver a la versión anterior del `.jar`).
+- Cifrado por defecto: SSE-S3.
+- Contenido: `backend/app.jar`. La instancia lo lee con el permiso `s3:GetObject` sobre
+  `backend/*` de la política v3 (§4).
+
+### Desplegar una versión nueva del backend
+
+No hay pipeline de CI/CD. Desde tu equipo (Java 25, Maven y el perfil de AWS CLI):
+
+```bash
+cd backend && mvn -q package
+aws s3 cp target/app.jar s3://boda-artefactos-248033171214/backend/app.jar --region us-east-1
+aws autoscaling start-instance-refresh --auto-scaling-group-name boda-backend-asg \
+  --preferences '{"MinHealthyPercentage":100,"MaxHealthyPercentage":200}'
+```
+
+El *instance refresh* levanta la instancia nueva antes de apagar la vieja, así que no hay corte.
+Tarda unos 10 minutos (el arranque dura ~4 min y la gracia del ASG es de 600 s). Seguimiento:
+
+```bash
+aws autoscaling describe-instance-refreshes --auto-scaling-group-name boda-backend-asg
+aws elbv2 describe-target-health --target-group-arn \
+  $(aws elbv2 describe-target-groups --names boda-backend-tg --query 'TargetGroups[0].TargetGroupArn' --output text)
+curl -s https://ddl2si3h6lu7z.cloudfront.net/api/recepcion/estado
+```
+
+### Volver a la versión anterior
+
+El bucket tiene versionado: restaurar una versión es copiarla encima de la actual y repetir el
+*instance refresh*.
+
+```bash
+aws s3api list-object-versions --bucket boda-artefactos-248033171214 --prefix backend/app.jar \
+  --query 'Versions[].[VersionId,LastModified,IsLatest]' --output table
+aws s3api copy-object --bucket boda-artefactos-248033171214 --key backend/app.jar \
+  --copy-source "boda-artefactos-248033171214/backend/app.jar?versionId=<VersionId anterior>"
+aws autoscaling start-instance-refresh --auto-scaling-group-name boda-backend-asg \
+  --preferences '{"MinHealthyPercentage":100,"MaxHealthyPercentage":200}'
+```
+
+## 14. Auto Scaling group `boda-backend-asg`
+
+Consola: EC2 → Auto Scaling groups → Create. **Crearlo solo cuando el `.jar` ya está en el bucket de
+artefactos (§13) y la v3 de la launch template es la versión por defecto (§6).**
+
+- Launch template: `boda-backend-lt`, versión *Default*.
+- VPC por defecto, subredes de `us-east-1a` y `us-east-1b`.
+- Load balancing: asociado al target group existente `boda-backend-tg` (§7).
+- Health checks: tipo **ELB**, con **gracia de 600 s**. El arranque tarda unos 4 minutos
+  (`dnf update` y descarga del `.jar`); con 300 s el ASG daba la instancia por muerta antes de que
+  terminara de arrancar.
+- Capacidad: mínima 1, deseada 1, máxima 1. Sin políticas de escalado.
+- Instance maintenance policy: *launch before terminating*, mínimo 100 % y máximo 200 % de
+  instancias sanas.
+- Tags, ambos propagados a las instancias: `proyecto=boda` y `Name=boda-backend`.
+- Comprobación: el target group `boda-backend-tg` tiene 1 destino *healthy* y
+  `https://ddl2si3h6lu7z.cloudfront.net/api/recepcion/estado` responde 200.
+- Después del evento (2026-12-02): eliminar el ASG y el ALB para apagar el cómputo (constitución,
+  Principio V).
+
+## Pendientes
+- Reemplazar el `.jar` mínimo por el backend completo (§13) a medida que se implementa.
+- Activar las acciones de las alarmas cuando esté el backend completo (§12).
+- Crear la app de Amplify `boda-novios` cuando exista `front-novios/` (§11).
+- Crear las cuentas `mara` y `daniel` en `boda-admins` (§3).
+- Antes del 2026-11-19: quitar `localhost` del CORS y ejecutar la lista de chequeo manual en
+  celulares reales.
 - Después del evento: apagar o eliminar el cómputo (Auto Scaling, ALB) según la constitución.

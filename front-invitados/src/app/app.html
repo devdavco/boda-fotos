@@ -1,11 +1,23 @@
 <main>
   <h1>Fotos de la boda de Mara y Daniel</h1>
-  @if (estado(); as valor) {
-    <p>Estado de la recepción: {{ valor }}</p>
-  } @else if (error(); as mensaje) {
-    <p>{{ mensaje }}</p>
-  } @else {
-    <p>Consultando el estado…</p>
+  @switch (estado()) {
+    @case ('ABIERTA') {
+      <app-subida />
+    }
+    @case ('NO_INICIADA') {
+      <p>La recepción de fotos y videos abre el jueves 19 de noviembre de 2026.</p>
+    }
+    @case ('CERRADA') {
+      <p>La recepción de fotos y videos ya cerró. ¡Gracias por compartir!</p>
+    }
+    @default {
+      @if (error(); as mensaje) {
+        <p>{{ mensaje }}</p>
+        <button type="button" (click)="consultar()">Volver a intentar</button>
+      } @else {
+        <p>Consultando el estado…</p>
+      }
+    }
   }
   @if (spike) {
     <app-spike />

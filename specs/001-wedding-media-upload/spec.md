@@ -36,6 +36,14 @@ desde un front-end privado y separado.
   dejando de mostrar el material después del 1 de diciembre a las 23:59 (FR-032 no cambia); la
   eliminación definitiva será manual, por el responsable técnico, cuando los novios la pidan.
 
+### Session 2026-11-14
+
+- Q: ¿Cómo se muestran las fotos JPG, PNG y WEBP en la cuadrícula sin cargar el original? → A: El
+  celular del invitado genera también una miniatura para JPG, PNG y WEBP, con el mismo mecanismo
+  que para los videos y sin procesamiento en el servidor; HEIC sigue mostrándose con ícono. Motivo:
+  con originales de 3–8 MB como miniatura no se cumple SC-007. Si la miniatura de una foto no se
+  genera, la galería muestra el original con carga diferida.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Invitado sube fotos y videos desde el QR (Priority: P1)
@@ -275,14 +283,15 @@ muestra ni permite descargar el material.
   incorrectos y MUST bloquear temporalmente tras 5 intentos fallidos consecutivos durante 15 minutos.
 - **FR-026**: La galería MUST mostrar en cuadrícula miniaturas de las fotos y videos recibidos, con
   fecha de subida y nombre declarado del invitado, ordenados del más reciente al más antiguo.
-  Las fotos JPG, PNG y WEBP muestran miniatura real; los videos muestran la miniatura generada en
-  el celular del invitado si existe; las fotos HEIC y los videos sin miniatura muestran un ícono de
-  tipo de archivo. No hay procesamiento de archivos en el servidor después de la subida. La
-  cuadrícula MUST cargar de forma progresiva (por bloques al hacer scroll o por páginas) y MUST NOT
+  Las fotos JPG, PNG y WEBP y los videos muestran la miniatura generada en el celular del invitado
+  si existe; las fotos JPG, PNG y WEBP sin miniatura muestran el original con carga diferida; las
+  fotos HEIC y los videos sin miniatura muestran un ícono de tipo de archivo. No hay procesamiento
+  de archivos en el servidor después de la subida. La cuadrícula MUST cargar de forma progresiva (por bloques al hacer scroll o por páginas) y MUST NOT
   ofrecer filtros ni búsqueda en la fase 1.
-- **FR-026a**: Al subir un video, la página de invitados MUST intentar generar en el celular una
-  miniatura (un fotograma, imagen pequeña) y subirla junto al video; si no lo logra, el video se
-  sube sin miniatura.
+- **FR-026a**: Al subir una foto JPG, PNG o WEBP o un video, la página de invitados MUST intentar
+  generar en el celular una miniatura (imagen pequeña; en los videos, un fotograma) y subirla junto
+  al archivo; si no lo logra, el archivo se sube sin miniatura. Para las fotos HEIC no se genera
+  miniatura.
 - **FR-027**: Los novios MUST poder abrir cada archivo en tamaño completo (o reproducir el video) y
   descargar el original individualmente.
 - **FR-028**: Los novios MUST poder eliminar fotos y videos, con confirmación previa.
@@ -332,8 +341,8 @@ muestra ni permite descargar el material.
   (para aplicar el tope de FR-012a).
 - **Archivo multimedia**: foto o video del evento; tiene identificador del sistema, nombre original,
   tipo, tamaño, fecha/hora de subida, nombre declarado del invitado vigente al subirlo, estado
-  (en progreso, completado, eliminado), sesión de subida asociada y miniatura cuando exista (solo
-  videos, generada en el celular del invitado).
+  (en progreso, completado, eliminado), sesión de subida asociada y miniatura cuando exista (fotos
+  JPG, PNG y WEBP y videos, generada en el celular del invitado).
 - **Usuario administrador**: novio con acceso al front-end privado; tiene nombre de usuario, hash de
   contraseña, contador de intentos fallidos y bloqueo temporal.
 
@@ -375,8 +384,8 @@ muestra ni permite descargar el material.
 - Una transferencia ya iniciada antes del cierre puede continuar brevemente; no se exige bloquear
   escrituras al minuto exacto más allá de rechazar la finalización de subidas en partes.
 - Los invitados no ven la galería ni los archivos de otros invitados; solo los novios la consultan.
-- No se convierten HEIC ni se procesan videos en el servidor; la única miniatura derivada es la
-  del video, generada en el celular del invitado.
+- No se convierten HEIC ni se procesan fotos o videos en el servidor; las únicas miniaturas
+  derivadas son las de fotos JPG, PNG y WEBP y las de videos, generadas en el celular del invitado.
 - La eliminación por parte de los novios es definitiva (no hay papelera).
 - No hay eliminación automática del material tras el 1 de diciembre; solo se limpian
   automáticamente las cargas multipart incompletas. La eliminación definitiva es manual, a pedido
