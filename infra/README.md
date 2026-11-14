@@ -560,7 +560,7 @@ artefactos (§13) y la v3 de la launch template es la versión por defecto (§6)
 - Capacidad: mínima 1, deseada 1, máxima 1. Sin políticas de escalado.
 - Instance maintenance policy: *launch before terminating*, mínimo 100 % y máximo 200 % de
   instancias sanas.
-- Tags: `proyecto=boda`, propagado a las instancias.
+- Tags, ambos propagados a las instancias: `proyecto=boda` y `Name=boda-backend`.
 - Comprobación: el target group `boda-backend-tg` tiene 1 destino *healthy* y
   `https://ddl2si3h6lu7z.cloudfront.net/api/recepcion/estado` responde 200.
 - Después del evento (2026-12-02): eliminar el ASG y el ALB para apagar el cómputo (constitución,
