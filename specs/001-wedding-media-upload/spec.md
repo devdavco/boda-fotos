@@ -378,5 +378,5 @@ muestra ni permite descargar el material.
 - Volumen esperado: del orden de 100–300 invitados y de 2.000 a 5.000 archivos en total.
 - Los parámetros de bloqueo del login (5 intentos, 15 minutos) y de inactividad de sesión (8 horas)
   son valores por defecto razonables, ajustables en el plan.
-- Dependencias: un dominio o subdominio con certificado HTTPS para la URL del QR y el front-end
-  privado; la región de alojamiento definitiva se decide en el plan con pruebas de latencia.
+- Dependencias: sin dominio propio; la URL del QR y el front-end privado usan los dominios HTTPS
+  de AWS Amplify, y el API el dominio de CloudFront. Región: us-east-1 (constitución v2.0.0).

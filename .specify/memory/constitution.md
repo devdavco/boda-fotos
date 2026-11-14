@@ -104,6 +104,7 @@ lugar.
 fotos que nunca llegan.
 
 ### V. Infraestructura documentada y costo acotado
+
 - Toda la infraestructura AWS se crea desde la consola de AWS, y cada recurso MUST quedar
   documentado en el repositorio (nombre, configuración relevante y pasos) con detalle suficiente
   para recrearlo. No se usa AWS CDK. Un recurso sin documentar en el repo se considera defecto.
