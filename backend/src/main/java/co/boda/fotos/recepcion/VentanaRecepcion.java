@@ -1,6 +1,7 @@
 package co.boda.fotos.recepcion;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -78,6 +79,17 @@ public class VentanaRecepcion {
     /** {@code true} si ya pasó el fin del periodo de disponibilidad (FR-032). */
     public boolean periodoTerminado() {
         return periodoTerminado(eventos.obtener(), reloj.instant());
+    }
+
+    /**
+     * Vigencia de una URL de subida (FR-015): {@code min(maxima, cierre efectivo − ahora)}. Así
+     * ninguna URL sirve después del cierre, ni del programado ni del anticipado. Puede ser cero o
+     * negativa si el cierre ya pasó; quien llama ya exigió la recepción abierta con
+     * {@link #requireAbierta()}, y {@code AlmacenamientoS3} nunca firma menos de 1 segundo.
+     */
+    public static Duration vigenciaUrl(Evento evento, Instant ahora, Duration maxima) {
+        Duration hastaCierre = Duration.between(ahora, cierreEfectivo(evento));
+        return hastaCierre.compareTo(maxima) < 0 ? hastaCierre : maxima;
     }
 
     /** Instante actual del reloj del servicio (UTC). */
