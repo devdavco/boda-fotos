@@ -1,12 +1,10 @@
-import { Component, signal } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
+/** Front de los novios (FR-023): login, galería y vista completa (contracts/ui.md). */
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet],
-  templateUrl: './app.html',
-  styleUrl: './app.css'
+  template: '<router-outlet />',
 })
-export class App {
-  protected readonly title = signal('front-novios');
-}
+export class App {}
