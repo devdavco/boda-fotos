@@ -129,8 +129,12 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     menos), se dibuja el fotograma. Tiempo máximo 5 s; si falla o tarda, el video sube sin
     miniatura (FR-026a).
   - Foto: `createImageBitmap` + `<canvas>`, mismo tiempo máximo y misma regla de fallo.
-  - La miniatura sube con su propia URL prefirmada (`image/jpeg`, máximo 1 MB) después del
-    original. Como las URLs firman el tamaño (R2), el navegador genera la miniatura **antes** de
+  - La miniatura sube con su propia URL prefirmada (`image/jpeg`, máximo 1 MB) **justo después
+    de autorizar, antes del original** (ajuste del 2026-11-14 al implementar T056; antes decía
+    "después del original"). Su URL dura 5 minutos y no se puede renovar (`POST .../url` no la
+    incluye), y un video grande por 4G tarda más que eso en subir: después del original la
+    miniatura fallaría justo en los archivos que más la necesitan. Si el original nunca llega, el
+    backend borra la miniatura al descartar o rechazar el archivo, así que no quedan huérfanas. Como las URLs firman el tamaño (R2), el navegador genera la miniatura **antes** de
     autorizar y envía su tamaño en `tamanoMiniatura`. No cuenta para el tope de 300 archivos; sus bytes no se suman al tope de 5 GB.
 - **Rationale**: la spec (FR-026 y la suposición "la única miniatura derivada es la del video")
   implica que la galería muestre las fotos con el **original** como miniatura. Una foto de celular

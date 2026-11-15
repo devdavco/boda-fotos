@@ -8,6 +8,7 @@ import {
   ParteCompletada,
   PeticionAutorizar,
 } from '../api/api';
+import { generarMiniatura } from './miniatura';
 import { ErrorMultipart, EstadoMultipart, enviarParteXhr, subirPartes } from './multipart';
 import { Sesion } from './sesion';
 import { Clasificacion, Formato, clasificar } from './tipos';
@@ -27,14 +28,14 @@ const MENSAJE_PUT_FALLIDO = 'No se pudo enviar el archivo. Inténtalo de nuevo.'
 /**
  * Genera la miniatura JPEG de un archivo, o `null` si no puede. Se llama **antes** de autorizar: la
  * URL de la miniatura firma su tamaño (research R2 y R4), así que el tamaño debe conocerse al pedir
- * la autorización. La implementación real es `miniatura.ts` (T055); mientras no exista, los
- * archivos suben sin miniatura.
+ * la autorización. La implementación es `miniatura.ts` (T055); es un token para poder
+ * reemplazarla en pruebas.
  */
 export type Miniaturizador = (archivo: File, formato: Formato) => Promise<Blob | null>;
 
 export const MINIATURIZADOR = new InjectionToken<Miniaturizador>('MINIATURIZADOR', {
   providedIn: 'root',
-  factory: () => async () => null,
+  factory: () => generarMiniatura,
 });
 
 export type EstadoItem = 'EN_COLA' | 'SUBIENDO' | 'LISTO' | 'FALLO' | 'RECHAZADO';
@@ -218,7 +219,6 @@ export class ColaSubida {
 
   private async subir(item: ItemSubida): Promise<void> {
     if (!item.originalSubido) {
-      let urlMiniatura: string | undefined;
       // Un multipart ya autorizado sigue con sus partes; si no, se autoriza o se pide URL nueva.
       if (item.multipart === null) {
         let autorizacion: Autorizacion | null = null;
@@ -228,7 +228,12 @@ export class ColaSubida {
         if (autorizacion === null) {
           autorizacion = await this.autorizar(item);
         }
-        urlMiniatura = autorizacion.urlMiniatura;
+        // La miniatura sube enseguida, antes del original: su URL dura 5 minutos y no se puede
+        // renovar, y un video grande por 4G tarda más que eso (research R4). Si el original no
+        // llega, el backend la borra al descartar el archivo.
+        if (autorizacion.urlMiniatura && item.miniatura && !item.miniaturaSubida) {
+          item.miniaturaSubida = await this.enviarMiniatura(autorizacion.urlMiniatura, item.miniatura);
+        }
         if (autorizacion.modo === 'SIMPLE') {
           await this.enviarOriginal(item, autorizacion);
         } else {
@@ -244,9 +249,6 @@ export class ColaSubida {
         item.partes = await this.enviarPartes(item, item.multipart);
       }
       item.originalSubido = true;
-      if (urlMiniatura && item.miniatura) {
-        item.miniaturaSubida = await this.enviarMiniatura(urlMiniatura, item.miniatura);
-      }
     }
     await this.completar(item);
   }
@@ -276,6 +278,8 @@ export class ColaSubida {
       this.api.autorizar(peticion),
     );
     item.archivoId = respuesta.archivoId;
+    // Archivo nuevo para el servidor: su miniatura todavía no está subida.
+    item.miniaturaSubida = false;
     return respuesta;
   }
 
@@ -379,7 +383,7 @@ export class ColaSubida {
     }
   }
 
-  /** La miniatura sube después del original y es opcional: cualquier falla solo la descarta. */
+  /** La miniatura es opcional: cualquier falla solo la descarta (FR-026a). */
   private async enviarMiniatura(url: string, miniatura: Blob): Promise<boolean> {
     const estado = await enviarPut(url, { 'Content-Type': 'image/jpeg' }, miniatura);
     return estado >= 200 && estado < 300;
