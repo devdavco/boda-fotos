@@ -1,17 +1,28 @@
-# Levanta DynamoDB Local y el S3 falso, crea las tablas y carga el evento de prueba y las cuentas
+﻿# Levanta DynamoDB Local y el S3 falso, crea las tablas y carga el evento de prueba y las cuentas
 # de los novios (local/README.md, paso 2). Se puede repetir: si ya estaba arriba, lo reinicia vacío.
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\comun.ps1"
 
 Write-Host '1/4  Levantando DynamoDB Local (puerto 8000) y S3 falso (puerto 9090)...'
-docker compose -f "$PSScriptRoot\docker-compose.yml" down --remove-orphans 2>$null | Out-Null
-docker compose -f "$PSScriptRoot\docker-compose.yml" up -d
-if ($LASTEXITCODE -ne 0) { throw '¿Docker Desktop está abierto? docker compose no pudo arrancar.' }
+# docker compose escribe su progreso en stderr; en Windows PowerShell 5.1, con
+# $ErrorActionPreference = 'Stop', eso se convierte en una excepción. Se ejecuta con 'Continue'
+# y se revisa el código de salida.
+$ErrorActionPreference = 'Continue'
+docker compose -f "$PSScriptRoot\docker-compose.yml" down --remove-orphans 2>&1 | Out-Null
+docker compose -f "$PSScriptRoot\docker-compose.yml" up -d 2>&1 | ForEach-Object { "$_" }
+$codigo = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($codigo -ne 0) { throw '¿Docker Desktop está abierto? docker compose no pudo arrancar.' }
 
 foreach ($i in 1..60) {
     $dynamo = $false; $s3 = $false
-    try { aws dynamodb list-tables --endpoint-url $Global:DynamoLocal --output text 2>$null | Out-Null; $dynamo = ($LASTEXITCODE -eq 0) } catch {}
-    try { $s3 = (Invoke-WebRequest "$Global:S3Local/$Global:BucketLocal" -Method Head -SkipHttpErrorCheck -TimeoutSec 2).StatusCode -eq 200 } catch {}
+    $ErrorActionPreference = 'Continue'
+    aws dynamodb list-tables --endpoint-url $Global:DynamoLocal --output text 2>&1 | Out-Null
+    $dynamo = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = 'Stop'
+    try {
+        $s3 = (Invoke-WebRequest "$Global:S3Local/$Global:BucketLocal" -Method Head -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200
+    } catch {}
     if ($dynamo -and $s3) { break }
     if ($i -eq 60) { throw 'DynamoDB Local o el S3 falso no respondieron en 2 minutos.' }
     Start-Sleep -Seconds 2

@@ -1,4 +1,5 @@
-# Valores comunes de los scripts locales (local/README.md). Se carga con: . "$PSScriptRoot\comun.ps1"
+﻿# Valores comunes de los scripts locales (local/README.md). Se carga con: . "$PSScriptRoot\comun.ps1"
+# Compatibles con Windows PowerShell 5.1 (la terminal por defecto de Windows) y con PowerShell 7.
 # Credenciales falsas: DynamoDB Local y S3Mock aceptan cualquiera. Nunca se usan contra AWS porque
 # todas las llamadas llevan --endpoint-url a localhost.
 
@@ -24,7 +25,9 @@ function Format-Local([datetime] $fecha) { $fecha.ToString('yyyy-MM-ddTHH:mm:ss'
 function Invoke-Dynamo([string] $operacion, [hashtable] $entrada) {
     $archivo = New-TemporaryFile
     try {
-        $entrada | ConvertTo-Json -Depth 10 | Set-Content -Path $archivo -Encoding utf8NoBOM
+        # UTF-8 sin BOM, igual en Windows PowerShell 5.1 y en PowerShell 7.
+        $json = ConvertTo-Json -InputObject $entrada -Depth 10
+        [System.IO.File]::WriteAllText($archivo.FullName, $json, (New-Object System.Text.UTF8Encoding $false))
         aws dynamodb $operacion --endpoint-url $Global:DynamoLocal --cli-input-json "file://$archivo" --output json
         if ($LASTEXITCODE -ne 0) { throw "Falló 'aws dynamodb $operacion'" }
     } finally {

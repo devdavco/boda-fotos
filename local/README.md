@@ -30,7 +30,7 @@ Ya están instalados en esta máquina; esto es para comprobarlo.
 | Maven | Compilar el backend | Lo encuentra el script en `%USERPROFILE%\.m2\wrapper\dists` |
 | Node.js | Los dos front-ends | `node -v` |
 | AWS CLI | Crear tablas en DynamoDB Local | `aws --version` |
-| PowerShell 7 | Los scripts de `local/` | `pwsh -v` |
+| PowerShell | Los scripts de `local/` | Funcionan en Windows PowerShell 5.1 (la terminal por defecto) y en PowerShell 7 |
 
 Las dependencias de los front-ends se instalan una vez (o cuando cambie `package-lock.json`):
 
@@ -213,8 +213,10 @@ jueves 19 de noviembre".
 
 | Síntoma | Solución |
 | --- | --- |
+| "no se puede cargar el archivo ... la ejecución de scripts está deshabilitada" | Una vez, en esa terminal: `Set-ExecutionPolicy -Scope Process Bypass`. |
 | `preparar.ps1`: "¿Docker Desktop está abierto?" | Abrir Docker Desktop y esperar a *Engine running*. |
 | `port is already allocated` (8000 o 9090) | Otro contenedor usa el puerto: `docker ps` y `docker stop <id>`. |
+| `/api/recepcion/estado` responde `ERROR_INTERNO` | Las tablas o el evento no existen en DynamoDB Local (por ejemplo, `preparar.ps1` no terminó o se reinició Docker). Ejecutar `.\local\preparar.ps1` y revisar que termine en "Listo."; no hace falta reiniciar el backend. |
 | Las páginas muestran error y el log del backend dice `No existe el evento 'boda-prueba'` | Faltó el paso 2, o se reinició Docker: ejecutar `.\local\preparar.ps1` (no hace falta reiniciar el backend). |
 | `Port 4200 is already in use` | Ya hay otro `ng serve` abierto: cerrarlo o usar `--port 4202`. |
 | Las páginas dicen "No se pudo consultar el estado" | El backend no está corriendo (paso 3). |

@@ -1,4 +1,4 @@
-# Compila y ejecuta el backend contra DynamoDB Local y el S3 falso (local/README.md, paso 3).
+﻿# Compila y ejecuta el backend contra DynamoDB Local y el S3 falso (local/README.md, paso 3).
 # Queda en primer plano: Ctrl+C lo detiene. Con -SinCompilar usa el .jar que ya existe.
 param([switch] $SinCompilar)
 $ErrorActionPreference = 'Stop'

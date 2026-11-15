@@ -1,4 +1,4 @@
-# Cambia la ventana del evento de prueba para ver cada estado (local/README.md, paso 7).
+﻿# Cambia la ventana del evento de prueba para ver cada estado (local/README.md, paso 7).
 # Uso: .\local\evento.ps1 abierta | no-iniciada | cerrada | periodo-terminado | ver
 param(
     [Parameter(Mandatory)]
