@@ -28,10 +28,10 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   - Una ruta de Angular (que no es un archivo): 200 con `index.html`, así que la regla de SPA
     funciona.
   - Plan B **no** activado.
-- **Pendiente** (T052, con los endpoints reales): que el proxy reenvíe el cuerpo JSON y los
-  encabezados `Authorization` y `X-Sesion-Subida`, y que devuelva los códigos de error del backend
-  sin reescribirlos. Si algo falla, se activa el plan B.
-
+- **Verificado el 2026-11-14** (T052, con los endpoints reales, a través del mismo dominio de
+  Amplify): `POST /api/sesiones-subida` con cuerpo JSON devuelve 201, `POST /api/subidas` con
+  `X-Sesion-Subida` devuelve 201 y `DELETE /api/subidas/{id}` devuelve 204. El cuerpo, el
+  encabezado y el método DELETE se reenvían bien. Plan B **no** necesario.
 ## R2. Cómo se transfieren los archivos
 
 - **Decision**: subida y descarga directas entre el navegador y el endpoint regional de S3

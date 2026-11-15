@@ -35,9 +35,26 @@ public class VentanaRecepcion {
         this.reloj = reloj;
     }
 
+    /**
+     * Estado de la ventana tal como lo ve {@code GET /api/recepcion/estado}. {@code cierreEn} es
+     * el cierre efectivo (el anticipado si existe y es anterior al programado).
+     */
+    public record Consulta(EstadoRecepcion estado, Instant aperturaEn, Instant cierreEn, Instant ahora) {
+    }
+
     /** Estado actual, con una lectura fresca del ítem del evento. */
     public EstadoRecepcion estado() {
         return calcular(eventos.obtener(), reloj.instant());
+    }
+
+    /**
+     * Estado y fechas de la ventana con una sola lectura fresca del ítem del evento y un solo
+     * instante del reloj, con la misma regla que {@link #requireAbierta()}.
+     */
+    public Consulta consultar() {
+        Evento evento = eventos.obtener();
+        Instant ahora = reloj.instant();
+        return new Consulta(calcular(evento, ahora), apertura(evento), cierreEfectivo(evento), ahora);
     }
 
     /**

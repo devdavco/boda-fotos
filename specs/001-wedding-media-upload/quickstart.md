@@ -115,6 +115,12 @@ se abre la ventana a mano y después se restaura.
 
 **4.4 Ventana de recepción** (US2, US4-2, SC-005)
 
+- [ ] **El estado sigue a DynamoDB**: con la ventana abierta, `curl -s .../api/recepcion/estado`
+      responde `ABIERTA`. Cambiar `aperturaLocal` al futuro en la consola y repetir el `curl` sin
+      reiniciar nada: responde `NO_INICIADA` con `aperturaEn` igual a ese valor en UTC. Luego
+      `cierreLocal` al pasado → `CERRADA`; restaurar y poner `cierreAnticipadoEn` → `CERRADA` con
+      `cierreEn` igual al anticipado. En cada cambio, `POST /api/sesiones-subida` debe coincidir
+      con el estado (201 solo con `ABIERTA`). Probar también por el dominio de Amplify.
 - [ ] **Antes de la apertura**: poner `aperturaLocal` en el futuro → la página dice que la
       recepción aún no abre, con la fecha, y el `curl` de 4.3 responde `403 RECEPCION_NO_INICIADA`.
 - [ ] **Después del cierre**: poner `cierreLocal` en el pasado → la página dice "ya cerró" y el
