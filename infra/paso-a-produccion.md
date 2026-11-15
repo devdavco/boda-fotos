@@ -214,11 +214,11 @@ entra sin conflictos. Se puede abrir en cualquier momento, incluso antes de los 
 ```powershell
 cd C:\Proyectos\boda-local\boda-fotos
 git switch daniel/001-admin; git pull; git push
-gh pr create --base david/001-impl --head daniel/001-admin --title "API y front de novios, ventana en el servidor, multipart y miniaturas" --body-file ..\PR-daniel-001-impl.md
+gh pr create --base david/001-impl --head daniel/001-admin --title "API y front de novios, ventana en el servidor, multipart y miniaturas" --body-file ..\PR-DESCRIPCION-daniel-001-admin.md
 ```
 
 O en GitHub: **base `david/001-impl` ← compare `daniel/001-admin`**, pegando la descripción de
-`C:\Proyectos\boda-local\PR-daniel-001-impl.md` (sin la línea del título).
+`C:\Proyectos\boda-local\PR-DESCRIPCION-daniel-001-admin.md`, que ya viene lista para pegar.
 
 ### 4.2 Publicar (David, como siempre)
 
