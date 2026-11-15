@@ -107,7 +107,8 @@ Abrir **http://localhost:4200**. `ng serve` reenvía `/api` al backend con `prox
 Qué probar:
 
 1. Escribir un nombre (por costumbre, que empiece por `Prueba`).
-2. **Elegir fotos y videos**: JPG, PNG, WEBP o videos MP4/MOV de **menos de 100 MB**.
+2. **Elegir fotos y videos**: JPG, PNG, WEBP o videos MP4/MOV de hasta 500 MB. Los de 100 MB o
+   más suben en partes de 10 MiB (multipart). Cada foto o video muestra su miniatura en la fila.
 3. Cada archivo muestra su barra de progreso y termina en **Listo ✓**.
 4. Probar también un archivo que no sea foto ni video (por ejemplo un `.pdf`) para ver el rechazo.
 
@@ -150,7 +151,7 @@ endpoints) para que la CLI de AWS no use tu cuenta real:
 cd C:\Proyectos\boda-local\boda-fotos
 . .\local\comun.ps1
 
-# Objetos subidos (originales y, cuando exista T055, miniaturas)
+# Objetos subidos: originales y miniaturas
 aws s3 ls s3://boda-fotos-local --recursive --endpoint-url http://localhost:9090
 
 # Archivos registrados y su estado (PENDIENTE, COMPLETADO, ELIMINADO...)
@@ -246,8 +247,6 @@ Notas:
 | Qué | Por qué | Dónde se prueba |
 | --- | --- | --- |
 | Que S3 rechace un archivo de otro tamaño (riesgo K9) | S3Mock no valida las firmas de las URLs | Producción, `quickstart.md` §4 |
-| Videos de 100 MB o más | Falta el multipart en el front (T054) | Cuando esté T054 |
-| Miniaturas | Falta generarlas en el celular (T055, T056); la galería carga el original | Cuando estén T055 y T056 |
 | Red móvil (4G) y celulares fuera de la casa | El celular entra por el WiFi al PC (sección 9) | Producción, desde los celulares |
 | Rewrite de Amplify, CloudFront, ALB y alarmas | Son infraestructura de AWS | Producción |
 
