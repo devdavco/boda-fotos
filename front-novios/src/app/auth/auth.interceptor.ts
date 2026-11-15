@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { aApiError } from '../api/api';
+import { GaleriaEstado } from '../galeria/galeria-estado';
 import { Auth } from './auth.service';
 
 const PREFIJO_ADMIN = '/api/admin/';
@@ -18,6 +19,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   if (!req.url.startsWith('/api/')) return next(req);
   const auth = inject(Auth);
   const router = inject(Router);
+  const galeria = inject(GaleriaEstado);
   const esAdmin = req.url.startsWith(PREFIJO_ADMIN) && req.url !== RUTA_LOGIN;
   const token = esAdmin ? auth.token() : null;
   const peticion = token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
@@ -27,6 +29,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       const apiError = aApiError(error);
       if (esAdmin && apiError.estado === 401) {
         auth.olvidar();
+        galeria.reiniciar(); // la próxima sesión no ve la lista ni el cursor de esta
         void router.navigateByUrl('/entrar');
       }
       return throwError(() => apiError);

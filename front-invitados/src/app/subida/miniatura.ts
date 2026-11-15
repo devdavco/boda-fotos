@@ -75,7 +75,15 @@ function desdeVideo(archivo: File, cancelado: () => boolean): Promise<Blob | nul
   return new Promise((resolver, rechazar) => {
     const url = URL.createObjectURL(archivo);
     const video = document.createElement('video');
+    let limpio = false;
+    // Si el video nunca dispara seeked, loadeddata ni error (pasa con algunos MOV grandes en iOS),
+    // ningún evento llama a limpiar: este temporizador libera el elemento y el object URL igual.
+    const vigilante = setTimeout(() => fallar(), TIEMPO_MAXIMO_MS);
     const limpiar = () => {
+      if (limpio) return;
+      limpio = true;
+      clearTimeout(vigilante);
+      video.onloadedmetadata = video.onloadeddata = video.onseeked = video.onerror = null;
       video.removeAttribute('src');
       video.load(); // suelta el decodificador
       URL.revokeObjectURL(url);

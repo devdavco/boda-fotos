@@ -198,6 +198,13 @@ async function subirParte(
 }
 
 /**
+ * Si un `PUT` pasa este tiempo sin avanzar, se aborta y cuenta como falla de red. Al pasar de WiFi
+ * a 4G la conexión puede quedarse colgada sin ningún evento de error, y sin esto la parte
+ * esperaría para siempre. No es un tiempo máximo total: una parte lenta pero que avanza sigue.
+ */
+export const SIN_AVANCE_MS = 60_000;
+
+/**
  * `PUT` de una parte con `XMLHttpRequest` (informa el avance, research R13) y lectura del `ETag`,
  * que el CORS del bucket expone (`ExposeHeaders: ETag`). Sin `Content-Type`: la URL de la parte
  * solo firma el tamaño.
@@ -209,12 +216,25 @@ export function enviarParteXhr(
 ): Promise<RespuestaParte> {
   return new Promise((resolver) => {
     const xhr = new XMLHttpRequest();
+    let vigilante: ReturnType<typeof setTimeout> | undefined;
+    const vigilar = () => {
+      clearTimeout(vigilante);
+      vigilante = setTimeout(() => xhr.abort(), SIN_AVANCE_MS);
+    };
+    const terminar = (respuesta: RespuestaParte) => {
+      clearTimeout(vigilante);
+      resolver(respuesta);
+    };
     xhr.open('PUT', url);
-    xhr.upload.onprogress = (e) => alAvance(e.loaded);
-    xhr.onload = () => resolver({ estado: xhr.status, etag: xhr.getResponseHeader('ETag') });
-    xhr.onerror = () => resolver({ estado: 0, etag: null });
-    xhr.ontimeout = () => resolver({ estado: 0, etag: null });
-    xhr.onabort = () => resolver({ estado: 0, etag: null });
+    xhr.upload.onprogress = (e) => {
+      vigilar();
+      alAvance(e.loaded);
+    };
+    xhr.onload = () => terminar({ estado: xhr.status, etag: xhr.getResponseHeader('ETag') });
+    xhr.onerror = () => terminar({ estado: 0, etag: null });
+    xhr.ontimeout = () => terminar({ estado: 0, etag: null });
+    xhr.onabort = () => terminar({ estado: 0, etag: null });
+    vigilar();
     xhr.send(cuerpo);
   });
 }

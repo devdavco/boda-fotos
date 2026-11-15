@@ -81,8 +81,9 @@ export class Galeria {
         return 'La recepción está cerrada: los invitados ya no pueden subir fotos ni videos.';
     }
   });
+  /** Solo con la recepción abierta: antes de abrir no se puede cerrar (el backend tampoco lo hace). */
   protected readonly puedeCerrar = computed(
-    () => this.estado.resumen() !== null && this.estado.resumen()?.recepcion.estado !== 'CERRADA',
+    () => this.estado.resumen()?.recepcion.estado === 'ABIERTA',
   );
   /** Error de la galería que no sea el de periodo terminado (ese tiene su propio mensaje). */
   protected readonly errorCarga = computed(() => {

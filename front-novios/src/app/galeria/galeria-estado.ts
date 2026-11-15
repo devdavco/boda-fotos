@@ -21,6 +21,11 @@ export class GaleriaEstado {
 
   private cursor: string | null = null;
   private iniciada = false;
+  /**
+   * Cambia en cada `reiniciar()`: una respuesta que llega después de cerrar sesión (o de un 401)
+   * pertenece a la sesión anterior y se descarta en vez de mezclarse con la nueva.
+   */
+  private generacion = 0;
 
   /** Carga el resumen y la primera página solo la primera vez. */
   async iniciar(): Promise<void> {
@@ -33,27 +38,31 @@ export class GaleriaEstado {
   }
 
   async actualizarResumen(): Promise<void> {
+    const generacion = this.generacion;
     try {
-      this.resumen.set(await this.api.resumen());
+      const resumen = await this.api.resumen();
+      if (generacion === this.generacion) this.resumen.set(resumen);
     } catch (e) {
-      this.error.set(aApiError(e));
+      if (generacion === this.generacion) this.error.set(aApiError(e));
     }
   }
 
   /** Siguiente página de 24 (FR-026). No hace nada si ya hay una carga en curso o no hay más. */
   async cargarMas(): Promise<void> {
     if (this.cargando() || this.completa()) return;
+    const generacion = this.generacion;
     this.cargando.set(true);
     this.error.set(null);
     try {
       const pagina = await this.api.galeria(this.cursor);
+      if (generacion !== this.generacion) return;
       this.elementos.update((actuales) => [...actuales, ...pagina.elementos]);
       this.cursor = pagina.siguienteCursor;
       this.completa.set(pagina.siguienteCursor === null);
     } catch (e) {
-      this.error.set(aApiError(e));
+      if (generacion === this.generacion) this.error.set(aApiError(e));
     } finally {
-      this.cargando.set(false);
+      if (generacion === this.generacion) this.cargando.set(false);
     }
   }
 
@@ -67,8 +76,10 @@ export class GaleriaEstado {
     void this.actualizarResumen();
   }
 
-  /** Al cerrar sesión: la siguiente persona empieza de cero. */
+  /** Al cerrar sesión o al vencer la sesión (401): la siguiente sesión empieza de cero. */
   reiniciar(): void {
+    this.generacion++;
+    this.cargando.set(false);
     this.resumen.set(null);
     this.elementos.set([]);
     this.completa.set(false);

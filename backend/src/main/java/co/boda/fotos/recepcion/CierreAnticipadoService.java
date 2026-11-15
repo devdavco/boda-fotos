@@ -27,12 +27,22 @@ public class CierreAnticipadoService {
         this.ventana = ventana;
     }
 
-    /** @param usuario el novio que cierra ({@code mara} o {@code daniel}) */
+    /**
+     * Solo cierra si la recepción está abierta. Antes de la apertura no hace nada: un cierre
+     * anticipado ahí la dejaría cerrada para siempre sin haber abierto nunca (y la interfaz seguiría
+     * diciendo que abre el 19). Después del cierre tampoco escribe nada. En ambos casos responde el
+     * estado actual.
+     *
+     * @param usuario el novio que cierra ({@code mara} o {@code daniel})
+     */
     public Map<String, Object> cerrar(String usuario) {
-        if (eventos.cerrarAnticipadamente(ventana.ahora(), usuario)) {
-            LOG.warn("Recepción cerrada anticipadamente por {}", usuario);
-        }
         Evento evento = eventos.obtener();
+        if (VentanaRecepcion.calcular(evento, ventana.ahora()) == EstadoRecepcion.ABIERTA) {
+            if (eventos.cerrarAnticipadamente(ventana.ahora(), usuario)) {
+                LOG.warn("Recepción cerrada anticipadamente por {}", usuario);
+            }
+            evento = eventos.obtener();
+        }
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("estado", VentanaRecepcion.calcular(evento, ventana.ahora()).name());
         respuesta.put("cierreEn", VentanaRecepcion.cierreEfectivo(evento).toString());

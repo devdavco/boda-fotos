@@ -407,8 +407,13 @@ export class ColaSubida {
           // El objeto (o alguna parte) no está en S3: un reintento manual tiene que enviarlo otra
           // vez. En multipart no se sabe qué parte falló, así que se reenvían todas.
           item.originalSubido = false;
-          item.multipart?.etags.clear();
-          item.partes = null;
+          if (item.multipart !== null) {
+            // Sin partes no se puede volver a completar: reintentar aquí daría 400. Queda como
+            // fallido y "Reintentar" vuelve a subir las partes.
+            item.multipart.etags.clear();
+            item.partes = null;
+            throw error;
+          }
         } else if (error instanceof ApiError && error.codigo === 'NO_ENCONTRADO') {
           // El servidor ya no conoce este archivo: un reintento manual tiene que autorizarlo de nuevo.
           item.originalSubido = false;

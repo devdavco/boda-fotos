@@ -292,9 +292,10 @@ public class SubidaService {
     private void descartarSubida(ArchivoMultimedia archivo) {
         if (archivo.modo() == Modo.MULTIPART) {
             almacenamiento.abortarMultipart(archivo.claveS3(), archivo.uploadId());
-        } else {
-            almacenamiento.borrar(archivo.claveS3());
         }
+        // También en multipart: si un completar anterior ya ensambló el objeto (y falló después,
+        // por ejemplo en la verificación), abortar no lo borra y quedaría huérfano en S3.
+        almacenamiento.borrar(archivo.claveS3());
         almacenamiento.borrar(almacenamiento.claveMiniatura(archivo.photoId()));
         archivos.descartar(archivo.photoId());
     }

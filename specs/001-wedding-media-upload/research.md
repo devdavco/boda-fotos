@@ -221,6 +221,11 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     `attribute_exists(usuario)`, para que un login con un usuario inexistente no cree un ítem.
   - **Usuario sin distinción de mayúsculas ni espacios**: se recorta y se pasa a minúsculas antes
     de buscarlo (las cuentas están en minúsculas, data-model.md §3).
+  - **Riesgos aceptados** (revisión de código del 2026-11-14): con muchos intentos simultáneos, los
+    que leyeron la cuenta antes de que se escriba el bloqueo se comparan contra el hash real, así
+    que el tope de 5 se puede superar en ráfagas; bcrypt de costo 12 limita el ritmo. Y un usuario
+    existente con contraseña mala tarda 10–30 ms más (las escrituras del contador), lo que delata
+    que existe; los nombres de usuario (`mara`, `daniel`) no son secretos.
 
 ## R7. Cuentas de administrador (FR-031)
 
