@@ -193,14 +193,62 @@ Al día siguiente se empieza otra vez desde el paso 2.
 
 ---
 
-## 9. Qué no se puede probar en local
+## 9. Probar desde el celular (mismo WiFi)
+
+El celular entra a las páginas que sirve el PC por la IP del PC en el WiFi, y sube los archivos
+directo al S3 falso del PC. Todo sigue siendo local: nada sale a internet.
+
+**Una sola vez: abrir el firewall de Windows.** En una terminal **como administrador**:
+
+```powershell
+New-NetFirewallRule -DisplayName 'boda-local (celular)' -Direction Inbound -Protocol TCP `
+  -LocalPort 4200,4201,9090 -RemoteAddress LocalSubnet -Action Allow -Profile Any
+```
+
+La regla solo acepta equipos de la misma red local (`LocalSubnet`). Para quitarla cuando ya no se
+use: `Remove-NetFirewallRule -DisplayName 'boda-local (celular)'` (también como administrador).
+
+**Cada vez**, igual que los pasos 2 a 5 pero con estos cambios:
+
+```powershell
+.\local\preparar.ps1                                   # si los contenedores no están arriba
+.\local\backend.ps1 -Celular                           # terminal 1: firma las URLs con la IP del PC
+cd front-invitados; npx ng serve --host 0.0.0.0 --port 4200   # terminal 2
+cd front-novios;    npx ng serve --host 0.0.0.0 --port 4201   # terminal 3
+```
+
+`backend.ps1 -Celular` detecta la IP del PC (la de la interfaz con salida al router) y muestra las
+direcciones para el celular, por ejemplo:
+
+```text
+  Invitados: http://192.168.81.44:4200
+  Novios:    http://192.168.81.44:4201
+```
+
+Si detecta otra IP (por ejemplo, la de una VPN o un adaptador virtual), pasarla a mano:
+`.\local\backend.ps1 -Celular -IpLan 192.168.x.y` (la del WiFi sale en `ipconfig`).
+
+Notas:
+
+- Las páginas también siguen funcionando en el PC, por `localhost` o por la IP.
+- Sin `-Celular`, el celular abre las páginas pero **no puede subir ni ver fotos**: las URLs
+  firmadas apuntarían a `localhost:9090`, que en el celular es el propio celular.
+- Si el celular no abre la página: comprobar que está en el **mismo WiFi** (no en datos móviles)
+  y que la regla del firewall existe. Algunos routers de invitados aíslan a los equipos entre sí;
+  en ese caso no hay forma de conectarlos.
+- Desde un iPhone, las fotos HEIC llegan convertidas a JPEG (research R13), igual que en
+  producción.
+
+---
+
+## 10. Qué no se puede probar en local
 
 | Qué | Por qué | Dónde se prueba |
 | --- | --- | --- |
 | Que S3 rechace un archivo de otro tamaño (riesgo K9) | S3Mock no valida las firmas de las URLs | Producción, `quickstart.md` §4 |
 | Videos de 100 MB o más | Falta el multipart en el front (T054) | Cuando esté T054 |
 | Miniaturas | Falta generarlas en el celular (T055, T056); la galería carga el original | Cuando estén T055 y T056 |
-| Fotos HEIC reales e iPhone/Android reales | El celular no llega a `localhost` del PC | Producción, desde los celulares |
+| Red móvil (4G) y celulares fuera de la casa | El celular entra por el WiFi al PC (sección 9) | Producción, desde los celulares |
 | Rewrite de Amplify, CloudFront, ALB y alarmas | Son infraestructura de AWS | Producción |
 
 Algunos textos están fijos según la spec y no cambian con las fechas de prueba: el banner dice
@@ -209,7 +257,7 @@ jueves 19 de noviembre".
 
 ---
 
-## 10. Problemas comunes
+## 11. Problemas comunes
 
 | Síntoma | Solución |
 | --- | --- |
