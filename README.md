@@ -70,7 +70,7 @@ Todo el diseño está en [`specs/001-wedding-media-upload/`](specs/001-wedding-m
   [`data-model.md`](specs/001-wedding-media-upload/data-model.md) y
   [`contracts/`](specs/001-wedding-media-upload/contracts/)
 - [x] Tareas — [`tasks.md`](specs/001-wedding-media-upload/tasks.md) (107 tareas, un commit por tarea)
-- [ ] Implementación: **78 de 107 tareas hechas** (2026-11-14). El código de las cinco historias de
+- [ ] Implementación: **82 de 107 tareas hechas** (2026-11-14). El código de las cinco historias de
   usuario está completo: subida de invitados con multipart y miniaturas, ventana de recepción, API
   y front de novios, eliminación, cierre anticipado y fin del periodo. Falta sobre todo trabajo de
   consola (cuentas de los novios, publicar el backend completo, app de Amplify `boda-novios`,
@@ -105,7 +105,7 @@ cd front-invitados; npm ci; npm start         # http://localhost:4200
 cd front-novios; npm ci; npx ng serve --port 4201   # http://localhost:4201 (mara / clave-de-prueba-1)
 ```
 
-Pruebas unitarias del multipart: `cd front-invitados; npx ng test --watch=false`.
+Pruebas unitarias: backend con `mvn test` en `backend/` (formatos, ventana de recepción y vigencia de URLs) y multipart con `npx ng test --watch=false` en `front-invitados/`.
 
 ## Ramas y despliegue
 
