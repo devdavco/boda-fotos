@@ -1,6 +1,5 @@
 import { Component, inject } from '@angular/core';
 import { EstadoRecepcionService } from './estado/estado';
-import { Spike } from './spike';
 import { Subida } from './subida/subida';
 
 /**
@@ -12,7 +11,7 @@ import { Subida } from './subida/subida';
  */
 @Component({
   selector: 'app-root',
-  imports: [Spike, Subida],
+  imports: [Subida],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -20,8 +19,6 @@ export class App {
   private readonly recepcion = inject(EstadoRecepcionService);
   protected readonly estado = this.recepcion.estado;
   protected readonly error = this.recepcion.error;
-  /** Pantalla temporal del spike de R2: solo con `#spike` en la URL (se elimina en T094). */
-  protected readonly spike = location.hash === '#spike';
 
   constructor() {
     void this.consultar();

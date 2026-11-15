@@ -227,7 +227,7 @@ description: "Lista de tareas del feature 001-wedding-media-upload"
 **⚠ La lista de chequeo se ejecuta completa en producción antes del 2026-11-19 (SC-008).**
 
 - [ ] T093 **[CONSOLA]** Cuando el backend esté sano, activar las acciones de las alarmas: `aws cloudwatch enable-alarm-actions --alarm-names boda-backend-sin-salud boda-api-errores-5xx` (plan, recurso 10). Confirmar que la suscripción del tema `boda-alertas` está confirmada
-- [ ] T094 **[CÓDIGO]** Eliminar la pantalla temporal `front-invitados/src/app/spike.ts` y su referencia en `front-invitados/src/app/app.ts` (de T027); merge a `david/release`
+- [ ] T094 **[CÓDIGO]** Eliminar la pantalla temporal `front-invitados/src/app/spike.ts` y su referencia en `front-invitados/src/app/app.ts` (de T027); merge a `david/release`. **Código hecho (2026-11-14, rama `daniel/001-admin`); falta el merge a `david/release`**
 - [ ] T095 **[CONSOLA]** Publicar la versión final del backend (`mvn -q package`, `aws s3 cp`, *instance refresh*) y verificar `boda-backend-tg` sano y `GET /api/recepcion/estado` con el estado real
 - [ ] T096 **[MANUAL]** Lista de chequeo `quickstart.md` §4.0 a §4.3: abrir la ventana, subida desde iPhone/Safari y Android/Chrome con red móvil (con un video ≥ 100 MB), reintento sin repetir los exitosos, rechazo de tipos y tamaños, y el tope de sesión (`maxArchivosPorSesion = 3` temporal)
 - [ ] T097 **[MANUAL]** Lista de chequeo `quickstart.md` §4.4: antes de la apertura, después del cierre, multipart tras el cierre y cierre anticipado persistente tras reiniciar
