@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -20,6 +21,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
@@ -39,6 +41,8 @@ public class ArchivoRepository {
      * número fijo de decimales, el orden alfabético de {@code galeriaOrden} es el orden
      * cronológico (con {@code Instant.toString()} un instante sin milisegundos ordenaría mal).
      */
+    private static final String INDICE_GALERIA = "galeria-index";
+
     private static final DateTimeFormatter UTC_MILIS =
             new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
 
@@ -160,6 +164,40 @@ public class ArchivoRepository {
             }
             throw new ApiException(CodigoError.NO_ENCONTRADO);
         }
+    }
+
+    /** Una página de la galería y el {@code galeriaOrden} desde el que sigue, o nulo si no hay más. */
+    public record PaginaGaleria(List<ArchivoMultimedia> archivos, String siguienteOrden) {
+    }
+
+    /**
+     * Archivos {@code COMPLETADO} del evento, del más reciente al más antiguo (FR-026): {@code Query}
+     * sobre {@code galeria-index} con {@code ScanIndexForward=false}, sin {@code Scan}.
+     *
+     * <p>Pide {@code limite + 1} elementos para saber si hay otra página sin que la última página
+     * llena devuelva un cursor que lleva a una página vacía.
+     *
+     * @param desdeOrden {@code galeriaOrden} del último elemento de la página anterior, o nulo
+     */
+    public PaginaGaleria galeria(String desdeOrden, int limite) {
+        QueryRequest.Builder consulta = QueryRequest.builder()
+                .tableName(propiedades.tablas().fotos())
+                .indexName(INDICE_GALERIA)
+                .keyConditionExpression("galeriaEvento = :evento")
+                .expressionAttributeValues(Map.of(":evento", AttributeValue.fromS(propiedades.eventId())))
+                .scanIndexForward(false)
+                .limit(limite + 1);
+        if (desdeOrden != null) {
+            consulta.exclusiveStartKey(Map.of(
+                    "galeriaEvento", AttributeValue.fromS(propiedades.eventId()),
+                    "galeriaOrden", AttributeValue.fromS(desdeOrden),
+                    "photoId", AttributeValue.fromS(desdeOrden.substring(desdeOrden.indexOf('#') + 1))));
+        }
+        List<Map<String, AttributeValue>> items = dynamo.query(consulta.build()).items();
+        boolean hayMas = items.size() > limite;
+        List<Map<String, AttributeValue>> pagina = hayMas ? items.subList(0, limite) : items;
+        String siguiente = hayMas ? texto(pagina.get(limite - 1), "galeriaOrden") : null;
+        return new PaginaGaleria(pagina.stream().map(ArchivoRepository::desde).toList(), siguiente);
     }
 
     /** {@code PENDIENTE -> DESCARTADO}. No hace nada si el archivo ya no está pendiente. */

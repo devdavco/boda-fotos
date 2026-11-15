@@ -85,7 +85,8 @@ public class VentanaRecepcion {
         return reloj.instant();
     }
 
-    static EstadoRecepcion calcular(Evento evento, Instant ahora) {
+    /** Estado de la ventana para un evento ya leído (por ejemplo, el resumen de los novios). */
+    public static EstadoRecepcion calcular(Evento evento, Instant ahora) {
         if (ahora.isBefore(apertura(evento))) {
             return EstadoRecepcion.NO_INICIADA;
         }
@@ -95,8 +96,13 @@ public class VentanaRecepcion {
         return EstadoRecepcion.ABIERTA;
     }
 
-    static boolean periodoTerminado(Evento evento, Instant ahora) {
-        return ahora.isAfter(aInstante(evento.disponibleHastaLocal()));
+    public static boolean periodoTerminado(Evento evento, Instant ahora) {
+        return ahora.isAfter(disponibleHasta(evento));
+    }
+
+    /** Fin del periodo para ver y descargar (FR-032), en UTC. */
+    public static Instant disponibleHasta(Evento evento) {
+        return aInstante(evento.disponibleHastaLocal());
     }
 
     public static Instant apertura(Evento evento) {
