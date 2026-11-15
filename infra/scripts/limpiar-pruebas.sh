@@ -234,7 +234,9 @@ borrar_objetos() {
   while IFS= read -r lote; do
     jq -c '{Objects: map({Key: .}), Quiet: true}' <<<"$lote" >"$TMP/lote-s3.json"
     respuesta=$(aws s3api delete-objects --bucket "$S3_BUCKET" --delete "file://$TMP/lote-s3.json" </dev/null)
-    errores=$(jq -r '(.Errors // []) | length' <<<"$respuesta")
+    # Con Quiet=true, delete-objects no imprime nada si todo salió bien (salida vacía, no un JSON
+    # sin "Errors"); solo devuelve un JSON con "Errors" cuando algún objeto falla.
+    errores=$(jq -r '(.Errors // []) | length' <<<"${respuesta:-null}")
     if [ "$errores" != "0" ]; then
       jq -r '.Errors[] | "  \(.Key): \(.Code) \(.Message)"' <<<"$respuesta" >&2
       die 1 "S3 no pudo borrar $errores objeto(s)."

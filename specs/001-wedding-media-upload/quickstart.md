@@ -85,6 +85,11 @@ se abre la ventana a mano y después se restaura.
 - [ ] iPhone/Safari, datos móviles: escanear el QR impreso, escribir el nombre, subir 5 fotos y
       1 video < 100 MB. Cada archivo muestra progreso y "Listo". La primera foto sube en menos de
       1 minuto desde el escaneo.
+      *Resultado parcial (2026-11-14, producción, iPhone/Safari, 4G, nombre `Prueba…`)*: 3 fotos
+      (hasta 10 MB) y 1 video `.mov` de 17 MB quedaron `COMPLETADO` con sus originales en S3 y los
+      contadores del evento en `archivosTotal=4`, `fotos=3`, `videos=1`. Sin miniaturas porque
+      falta T055. Faltan: las 5 fotos de la lista, medir la primera foto en menos de 1 minuto y
+      repetir en Android.
 - [ ] iPhone/Safari, **foto HEIC real** tomada con la cámara (formato "Alta eficiencia"): el
       archivo llega como `.jpeg` con tipo `image/jpeg` (el `accept` del selector no incluye
       `image/heic`, research R13), se genera la miniatura y la galería de los novios la muestra.
@@ -99,6 +104,10 @@ se abre la ventana a mano y después se restaura.
 
 - [ ] Empezar a subir 4 archivos y activar el modo avión a mitad. Al volver la señal, "Reintentar
       fallidos" reenvía solo los que no terminaron; los terminados no se repiten.
+      *Resultado parcial (2026-11-14, producción, iPhone/Safari, 4G)*: con el modo avión activado
+      a mitad de la subida del video `.mov` de 17 MB (`PUT` simple), el reintento terminó y el
+      archivo quedó `COMPLETADO`. Falta la variante con 4 archivos y comprobar que los ya
+      terminados no se reenvían. Los dos casos de video ≥ 100 MB (multipart) dependen de T054.
 - [ ] Video ≥ 100 MB: cortar la red a mitad y reintentar. Continúa desde las partes que faltaban
       (el progreso no vuelve a 0).
 - [ ] Video ≥ 100 MB: activar el modo avión **más de 5 minutos** a mitad de la subida y volver a
@@ -183,6 +192,11 @@ se abre la ventana a mano y después se restaura.
       `archivosTotal=0  fotos=0  videos=0`, la galería de los novios queda vacía y repetir el
       comando con el mismo prefijo falla con "No hay sesiones…" (código 3). Si un archivo de prueba
       no empieza por ese prefijo, el script lo avisa y no lo borra; borrarlo desde la galería.
+      *Resultado (2026-11-14)*: la limpieza de la prueba de T053 se hizo con el script y la
+      ventana se restauró. La primera corrida con `--ejecutar` borró los objetos de S3 pero se
+      detuvo con "S3 no pudo borrar  objeto(s)." porque `delete-objects` con `Quiet=true` no
+      imprime nada cuando todo sale bien y el script lo tomó como error; corregido en
+      `borrar_objetos` y probado con un `aws` simulado.
 - [ ] La página de invitados muestra "abre el jueves 19 de noviembre".
 - [ ] Quitar `http://localhost:4200` del CORS del bucket; activar PITR en las tablas.
 - [ ] Imprimir o validar el QR con la URL definitiva de Amplify (`https://david-release.d2x2ckep95pz3x.amplifyapp.com`).
