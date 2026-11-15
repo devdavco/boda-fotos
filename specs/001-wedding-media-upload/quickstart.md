@@ -73,6 +73,8 @@ Hacerla el **2026-11-17 o el 2026-11-18**. Como la recepción real abre el 19, d
 se abre la ventana a mano y después se restaura.
 
 **4.0 Preparación**
+- [ ] En todas las pruebas de esta lista escribir un nombre de invitado que empiece por `Prueba`
+      (por ejemplo `Prueba iPhone`): así `limpiar-pruebas.sh` las encuentra en §4.9.
 
 - [ ] En `boda-evento` → ítem `boda-2026`, anotar los valores actuales y cambiar `aperturaLocal`
       a una hora ya pasada de hoy y `cierreLocal` a dentro de 3 horas.
@@ -172,7 +174,15 @@ se abre la ventana a mano y después se restaura.
 - [ ] Ítem `boda-2026` con los valores reales: `aperturaLocal = 2026-11-19T00:00`,
       `cierreLocal = 2026-11-22T12:00`, `disponibleHastaLocal = 2026-12-01T23:59:59`, topes
       `300` / `5368709120`, sin `cierreAnticipado*`.
-- [ ] Eliminar desde la galería **todos los archivos de prueba**; el contador queda en 0.
+- [ ] Limpiar **todas las pruebas** desde CloudShell con `infra/scripts/limpiar-pruebas.sh`
+      (descarga y uso en `infra/README.md`, §15), con el prefijo del nombre usado en las pruebas
+      (las de T052 usan `Prueba`). Primero `./limpiar-pruebas.sh Prueba`, que solo lista; revisar
+      que todo lo listado sea de prueba y correr `./limpiar-pruebas.sh --ejecutar Prueba`. Borra
+      archivos en S3 y en `boda-fotos`, multipart pendientes y sesiones, y recalcula los contadores
+      de `boda-2026` desde los archivos `COMPLETADO` que quedan. El resumen debe mostrar
+      `archivosTotal=0  fotos=0  videos=0`, la galería de los novios queda vacía y repetir el
+      comando con el mismo prefijo falla con "No hay sesiones…" (código 3). Si un archivo de prueba
+      no empieza por ese prefijo, el script lo avisa y no lo borra; borrarlo desde la galería.
 - [ ] La página de invitados muestra "abre el jueves 19 de noviembre".
 - [ ] Quitar `http://localhost:4200` del CORS del bucket; activar PITR en las tablas.
 - [ ] Imprimir o validar el QR con la URL definitiva de Amplify (`https://david-release.d2x2ckep95pz3x.amplifyapp.com`).
