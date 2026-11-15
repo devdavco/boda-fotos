@@ -20,6 +20,8 @@ management:
 boda:
   aws-region: ${AWS_REGION:us-east-1}
   s3-bucket: ${S3_BUCKET:boda-fotos-2026}
+  # Solo en desarrollo local (local/README.md): endpoint de un S3 falso. Vacío en AWS.
+  s3-endpoint: ${S3_ENDPOINT:}
   event-id: ${EVENT_ID:}
   tablas:
     fotos: ${DYNAMODB_TABLE_PHOTOS:boda-fotos}
