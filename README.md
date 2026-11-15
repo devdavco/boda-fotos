@@ -123,3 +123,5 @@ Pruebas unitarias: backend con `mvn test` en `backend/` (formatos, ventana de re
   `s3://boda-artefactos-248033171214/backend/app.jar` y lanzar un *instance refresh* del ASG, sin
   corte de servicio ([`infra/README.md`](infra/README.md) §13).
 - **Front-ends:** push o PR a `david/release`; Amplify construye y publica solo.
+- Paso a producción del trabajo de `daniel/001-admin` (backend, cuentas, pruebas, PR y app
+  `boda-novios`), con comprobaciones y vuelta atrás: [`infra/paso-a-produccion.md`](infra/paso-a-produccion.md).
