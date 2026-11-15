@@ -4,7 +4,8 @@ Guía para llevar a producción lo que está en la rama `daniel/001-admin`: API 
 front de novios, ventana de recepción en el servidor, multipart y miniaturas. Cada paso dice qué
 hacer, cómo comprobar que salió bien y cómo volver atrás.
 
-Cubre las tareas **T075 → T074 → T076 → PR a `david/release` → T022 → T083/T094**, en ese orden.
+Cubre las tareas **T075 → T074 → T076 → PR a `david/001-impl` y publicación en `david/release` →
+T022 → T083/T094**, en ese orden.
 El inventario de recursos está en [`README.md`](README.md); esta guía no lo repite.
 
 | Dato | Valor |
@@ -185,8 +186,8 @@ nombre.
    ```
 
 2. Mientras el front de invitados en producción sea el de `david/release`, el celular sube por la
-   página actual (sin multipart ni miniaturas). Esas dos cosas se prueban después del merge
-   (paso 6). Nombre: `Prueba Daniel`.
+   página actual (sin multipart ni miniaturas). Esas dos cosas se prueban después de
+   publicar (paso 6). Nombre: `Prueba Daniel`.
 3. Ver los archivos en el API (`$API/admin/galeria`) y probar `url?uso=ver|descargar` y
    `DELETE $API/admin/archivos/<id>` → 204, y que el contador de `$API/admin/resumen` baja.
 4. **Cerrar la ventana al terminar:**
@@ -203,40 +204,43 @@ nombre.
 
 ---
 
-## Paso 4. Rama `daniel/release` y PR hacia `david/release`
+## Paso 4. PR hacia `david/001-impl` y publicación en `david/release`
 
-Solo si el paso 3.2 dio 200 por Amplify.
+### 4.1 Integrar (PR de Daniel; no publica nada)
+
+`daniel/001-admin` sale de la punta de `david/001-impl`, así que el PR muestra solo estos cambios y
+entra sin conflictos. Se puede abrir en cualquier momento, incluso antes de los pasos 1 a 3.
 
 ```powershell
 cd C:\Proyectos\boda-local\boda-fotos
-git switch daniel/001-admin; git pull
-git switch -c daniel/release
-git push -u origin daniel/release
+git switch daniel/001-admin; git pull; git push
+gh pr create --base david/001-impl --head daniel/001-admin --title "API y front de novios, ventana en el servidor, multipart y miniaturas" --body-file ..\PR-daniel-001-impl.md
 ```
 
-Abrir el PR en GitHub: **base `david/release` ← compare `daniel/release`**, o con
-`gh pr create --base david/release --head daniel/release`.
+O en GitHub: **base `david/001-impl` ← compare `daniel/001-admin`**, pegando la descripción de
+`C:\Proyectos\boda-local\PR-daniel-001-impl.md` (sin la línea del título).
 
-En la descripción del PR conviene decir:
+### 4.2 Publicar (David, como siempre)
 
-- Trae también **3 commits de David** que están en `david/001-impl` y aún no en `david/release`
-  (T059 y el script `limpiar-pruebas.sh`). El merge entra sin conflictos (comprobado con
-  `git merge-tree`).
-- Archivos de David que cambian: `SecurityConfig`, `ArchivoRepository`, `VentanaRecepcion`,
-  `SubidaService`, `AwsConfig` (solo agrega `S3_ENDPOINT`, vacío en AWS), `EventoRepository`,
-  `cola-subida.ts`, `app.ts`, `app.config.ts`.
-- Decisiones nuevas en `research.md`: R4 (la miniatura sube antes del original), R5, R6 y R7.
-- Al mergear, Amplify publica `front-invitados` (multipart, miniaturas, aviso de recepción
-  cerrada, sin `#spike`). `front-novios` todavía no se publica: falta la app (paso 5).
+Solo si el paso 1 está hecho y el paso 3.2 dio 200 por Amplify. David lleva `david/001-impl` a
+`david/release` con su flujo habitual:
 
-**Volver atrás:** si algo sale mal después del merge, revertir el commit de merge en
-`david/release` (`git revert -m 1 <merge>`) y Amplify vuelve a publicar la versión anterior.
+```bash
+git switch david/release && git pull
+git merge --no-ff david/001-impl && git push
+```
+
+Amplify publica `front-invitados` en la URL del QR: multipart, miniaturas, aviso de recepción
+cerrada y sin `#spike`. `front-novios` todavía no se publica: falta la app (paso 5).
+
+**Volver atrás:** revertir el commit de merge en `david/release` (`git revert -m 1 <merge>`, push)
+y Amplify vuelve a publicar la versión anterior. `david/001-impl` no se toca.
 
 ---
 
 ## Paso 5. Crear la app de Amplify `boda-novios` (T022)
 
-Después de que el PR esté mergeado, para que su primer build encuentre `front-novios/`.
+Después del paso 4.2, para que su primer build encuentre `front-novios/` en `david/release`.
 
 Consola → Amplify → **Create new app** → GitHub, igual que `boda-invitados` (`README.md` §11):
 
@@ -266,7 +270,7 @@ Consola → Amplify → **Create new app** → GitHub, igual que `boda-invitados
 
 ---
 
-## Paso 6. Pruebas con celulares reales (después del merge)
+## Paso 6. Pruebas con celulares reales (después del paso 4.2)
 
 Con la ventana abierta como en 3.4 y cerrada al terminar:
 

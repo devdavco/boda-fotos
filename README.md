@@ -113,12 +113,12 @@ Pruebas unitarias: backend con `mvn test` en `backend/` (formatos, ventana de re
 | --- | --- |
 | `main` | Rama oficial: constitución, spec e infraestructura aprobadas por PR. |
 | `david/001-plan`, `david/001-impl` | Plan, tareas e implementación de David. |
-| `daniel/001-admin` | Trabajo de Daniel sobre `david/001-impl`: API y front de novios, ventana de recepción en el servidor, multipart, miniaturas y entorno local. |
+| `daniel/001-admin` | Trabajo de Daniel sobre `david/001-impl`, que se integra por PR a esa rama: API y front de novios, ventana de recepción en el servidor, multipart, miniaturas y entorno local. |
 | `david/release` | **Lo que despliega Amplify.** Su dominio es la URL del QR: no se recrea ni se renombra. Solo entra lo que está listo. |
 
-- Las ramas de trabajo llegan a `david/release` con `merge --no-ff` (David) o por **Pull Request**
-  desde una rama `daniel/release` (Daniel). Del 19 al 22 de noviembre solo entran correcciones
-  críticas.
+- Daniel integra su trabajo con un **Pull Request de `daniel/001-admin` hacia `david/001-impl`**.
+  Publicar es de David: lleva `david/001-impl` a `david/release` con `merge --no-ff`. Del 19 al 22
+  de noviembre solo entran correcciones críticas.
 - **Backend:** `mvn package`, subir `target/app.jar` a
   `s3://boda-artefactos-248033171214/backend/app.jar` y lanzar un *instance refresh* del ASG, sin
   corte de servicio ([`infra/README.md`](infra/README.md) §13).
