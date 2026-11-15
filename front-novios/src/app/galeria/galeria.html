@@ -1,0 +1,76 @@
+<header class="cabecera">
+  <div class="fila">
+    <h1>Fotos y videos de la boda</h1>
+    <div class="usuario">
+      @if (nombre(); as n) {
+        <span>{{ n }}</span>
+      }
+      <button type="button" (click)="salir()">Cerrar sesión</button>
+    </div>
+  </div>
+
+  @if (!periodoTerminado()) {
+    @if (contador(); as texto) {
+      <p class="contador">
+        <strong>{{ texto }}</strong>
+        @if (ultimaSubida(); as hora) {
+          · Última subida: {{ hora }}
+        }
+      </p>
+    }
+    @if (recepcion(); as texto) {
+      <div class="recepcion">
+        <p>{{ texto }}</p>
+        @if (puedeCerrar()) {
+          <button type="button" class="peligro" [disabled]="cerrando()" (click)="cerrarRecepcion()">
+            {{ cerrando() ? 'Cerrando…' : 'Cerrar la recepción ahora' }}
+          </button>
+        }
+      </div>
+    }
+    @if (errorCierre(); as mensaje) {
+      <p class="error" role="alert">{{ mensaje }}</p>
+    }
+  }
+</header>
+
+@if (periodoTerminado()) {
+  <main>
+    <p class="aviso" role="status">{{ mensajePeriodo }}</p>
+  </main>
+} @else {
+  <p class="aviso banner">
+    Puedes ver y descargar el material hasta el martes 1 de diciembre de 2026 a las 11:59 p. m.
+    Después, solo se podrá recuperar pidiéndoselo al responsable técnico.
+  </p>
+
+  <main>
+    @if (estado.aviso(); as mensaje) {
+      <p class="aviso" role="status">
+        {{ mensaje }}
+        <button type="button" class="cerrar-aviso" (click)="estado.aviso.set(null)" aria-label="Cerrar aviso">×</button>
+      </p>
+    }
+
+    @if (estado.elementos().length > 0) {
+      <ul class="cuadricula">
+        @for (elemento of estado.elementos(); track elemento.archivoId) {
+          <li><app-celda [elemento]="elemento" /></li>
+        }
+      </ul>
+    } @else if (estado.completa()) {
+      <p class="vacio">Todavía no hay fotos ni videos. Aparecerán aquí cuando los invitados los suban.</p>
+    }
+
+    @if (errorCarga(); as mensaje) {
+      <div class="estado-carga">
+        <p class="error" role="alert">{{ mensaje }}</p>
+        <button type="button" (click)="reintentar()">Reintentar</button>
+      </div>
+    } @else if (estado.cargando()) {
+      <p class="estado-carga" role="status">Cargando…</p>
+    }
+
+    <div #fin class="fin" aria-hidden="true"></div>
+  </main>
+}
