@@ -159,6 +159,18 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   misma transacción (`TransactWriteItems`) que completa o elimina un archivo. Reflejan los archivos
   visibles en la galería (completados no eliminados). La hora de la última subida no retrocede al
   eliminar.
+- **Ajustes de la implementación** (2026-11-14, T072 y T085):
+  - **Cursor de la galería = `galeriaOrden` en Base64URL.** Como `galeriaOrden =
+    <subidoEn>#<photoId>`, con él se reconstruye la clave completa del índice
+    (`galeriaEvento`, `galeriaOrden`, `photoId`) sin exponer nada más. El backend rechaza con
+    `PETICION_INVALIDA` un cursor que no tenga esa forma.
+  - **Se piden `limite + 1` elementos.** Si llegan más de `limite`, hay otra página; si no,
+    `siguienteCursor` es `null`. Así la última página llena no devuelve un cursor que lleve a una
+    página vacía (lo que pasaría usando `LastEvaluatedKey`).
+  - **Eliminar: primero S3, después la transacción.** Si algo falla a mitad de camino, repetir la
+    petición lo resuelve: borrar un objeto que ya no existe no es un error y la transacción solo
+    resta una vez. En el orden inverso, un fallo dejaría el original en S3 aunque el archivo ya no
+    apareciera en la galería.
 
 ## R6. Autenticación de los novios
 
@@ -188,6 +200,23 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     `Set-Cookie` y exige protección CSRF. El riesgo de XSS es bajo: Angular escapa la
     interpolación y no se renderiza HTML de terceros. Descartado por plazo.
   - Argon2id: descartado por la dependencia extra; la constitución acepta bcrypt.
+- **Ajustes de la implementación** (2026-11-14, T068; decisiones tomadas al implementar, no
+  estaban en la spec):
+  - **Tiempo de respuesta igual en todos los fallos.** Con la cuenta bloqueada, o con una
+    contraseña que bcrypt no acepta (vacía o de más de 72 bytes), no se compara contra el hash
+    real (se cumple "responde sin comprobar la contraseña"), pero sí contra el hash ficticio. Sin
+    eso, esos casos respondían en ~30 ms frente a ~500 ms de un usuario inexistente, y el tiempo
+    delataba que la cuenta existe (FR-025).
+  - **Contraseñas de más de 72 bytes cuentan como fallo.** bcrypt solo usa los primeros 72 bytes y
+    Spring Security 7 lanza una excepción con contraseñas más largas; se tratan como contraseña
+    incorrecta (suman un intento) en vez de responder 500.
+  - **Al bloquear, `intentosFallidos` vuelve a 0.** Cuando pasan los 15 minutos hay otros 5
+    intentos. Sin el reinicio, el primer fallo después del bloqueo volvería a bloquear la cuenta.
+  - **Los fallos se suman con `ADD` atómico** (`ReturnValues=UPDATED_NEW`): dos intentos
+    simultáneos cuentan dos. Todos los `UpdateItem` sobre `boda-admins` llevan
+    `attribute_exists(usuario)`, para que un login con un usuario inexistente no cree un ítem.
+  - **Usuario sin distinción de mayúsculas ni espacios**: se recorta y se pasa a minúsculas antes
+    de buscarlo (las cuentas están en minúsculas, data-model.md §3).
 
 ## R7. Cuentas de administrador (FR-031)
 
@@ -201,6 +230,14 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
 - **Alternatives considered**: endpoint de "bootstrap" protegido por un secreto (superficie de
   ataque innecesaria); ejecutar el comando en la instancia por Session Manager (exige ampliar el
   rol). Descartados.
+- **Ajustes de la implementación** (2026-11-14, T071):
+  - **Mínimo de 10 caracteres y máximo de 72 bytes.** La spec no fija una política de
+    contraseñas; 10 caracteres es un mínimo razonable para cuentas que dan acceso a todo el
+    material, y 72 bytes es el límite de bcrypt (R6). El comando rechaza lo que no cumple y no
+    imprime hash.
+  - **Exige una terminal real** (`System.console().isTerminal()`). Desde Java 22
+    `System.console()` existe aunque la entrada esté redirigida; así la contraseña nunca viene de
+    un archivo ni de una tubería, ni queda en el historial del shell.
 
 ## R8. Sesión de subida de invitados (FR-004a, FR-012a)
 
