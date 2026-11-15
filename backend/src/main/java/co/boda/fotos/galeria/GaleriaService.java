@@ -76,8 +76,10 @@ public class GaleriaService {
     /**
      * @param cursor el {@code siguienteCursor} de la página anterior, o nulo para la primera
      * @param limiteTexto de 1 a 48; nulo o vacío es 24
+     * @throws ApiException {@code PERIODO_TERMINADO} después del 2026-12-01 23:59:59 de Cali
      */
     public Map<String, Object> galeria(String cursor, String limiteTexto) {
+        exigirPeriodoVigente(ventana);
         int limite = limite(limiteTexto);
         ArchivoRepository.PaginaGaleria pagina = archivos.galeria(decodificar(cursor), limite);
 
@@ -103,6 +105,16 @@ public class GaleriaService {
         e.put("urlMiniatura",
                 archivo.claveMiniatura() == null ? null : almacenamiento.urlLectura(archivo.claveMiniatura(), null));
         return e;
+    }
+
+    /**
+     * Después del fin de disponibilidad no se entregan ni la galería ni URLs de archivos (FR-032).
+     * No se borra nada: el material sigue en S3 hasta que los novios lo pidan (FR-033).
+     */
+    static void exigirPeriodoVigente(VentanaRecepcion ventana) {
+        if (ventana.periodoTerminado()) {
+            throw new ApiException(CodigoError.PERIODO_TERMINADO);
+        }
     }
 
     static int limite(String texto) {

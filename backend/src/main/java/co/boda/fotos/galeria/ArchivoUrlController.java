@@ -13,16 +13,24 @@ import co.boda.fotos.subida.AlmacenamientoS3;
 import co.boda.fotos.subida.ArchivoMultimedia;
 import co.boda.fotos.subida.ArchivoRepository;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * {@code GET /api/admin/archivos/{archivoId}/url?uso=ver|descargar} (FR-027): URL {@code GET}
  * prefirmada de 15 minutos del original. Con {@code uso=descargar}, S3 responde con
  * {@code Content-Disposition: attachment; filename*=UTF-8''<nombre original>} y el navegador lo
- * guarda con el nombre que tenía en el celular. Solo para archivos {@code COMPLETADO}.
+ * guarda con el nombre que tenía en el celular. Solo para archivos {@code COMPLETADO} y hasta el fin
+ * de disponibilidad (después, {@code 410 PERIODO_TERMINADO}).
+ *
+ * <p>También {@code DELETE /api/admin/archivos/{archivoId}} (FR-028), que delega en
+ * {@link EliminacionService}.
  */
 @RestController
 public class ArchivoUrlController {
@@ -34,12 +42,15 @@ public class ArchivoUrlController {
     private final AlmacenamientoS3 almacenamiento;
     private final VentanaRecepcion ventana;
     private final BodaProperties propiedades;
+    private final EliminacionService eliminacion;
 
     public ArchivoUrlController(
             ArchivoRepository archivos,
             AlmacenamientoS3 almacenamiento,
             VentanaRecepcion ventana,
-            BodaProperties propiedades) {
+            BodaProperties propiedades,
+            EliminacionService eliminacion) {
+        this.eliminacion = eliminacion;
         this.archivos = archivos;
         this.almacenamiento = almacenamiento;
         this.ventana = ventana;
@@ -56,9 +67,8 @@ public class ArchivoUrlController {
         } else {
             throw new ApiException(CodigoError.PETICION_INVALIDA);
         }
-        if (archivoId == null || !UUID_V4.matcher(archivoId).matches()) {
-            throw new ApiException(CodigoError.NO_ENCONTRADO);
-        }
+        validarId(archivoId);
+        GaleriaService.exigirPeriodoVigente(ventana);
         ArchivoMultimedia archivo = archivos.buscar(archivoId)
                 .filter(a -> a.estado() == ArchivoMultimedia.Estado.COMPLETADO)
                 .filter(a -> propiedades.eventId().equals(a.eventoId()))
@@ -69,6 +79,20 @@ public class ArchivoUrlController {
         respuesta.put("url", almacenamiento.urlLectura(archivo.claveS3(), disposicion));
         respuesta.put("expiraEn", ventana.ahora().plus(propiedades.limites().urlLectura()).toString());
         return respuesta;
+    }
+
+    /** El usuario autenticado lo deja {@code BearerTokenFilter} como nombre de la autenticación. */
+    @DeleteMapping("/api/admin/archivos/{archivoId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@PathVariable String archivoId, Authentication autenticacion) {
+        validarId(archivoId);
+        eliminacion.eliminar(archivoId, autenticacion.getName());
+    }
+
+    private static void validarId(String archivoId) {
+        if (archivoId == null || !UUID_V4.matcher(archivoId).matches()) {
+            throw new ApiException(CodigoError.NO_ENCONTRADO);
+        }
     }
 
     /** {@code attachment; filename*=UTF-8''<nombre codificado según RFC 5987>}. */
