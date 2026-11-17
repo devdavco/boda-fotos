@@ -456,9 +456,8 @@ mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones cr�
   - `POST` y `DELETE` al mismo path: 405 **generado por Spring**, lo que prueba que ambos métodos
     atraviesan el rewrite y llegan al backend.
   - Rutas de Angular (rutas que no son un archivo): 200 con `index.html`.
-  - **Pendiente** (tarea T052): reenvío del cuerpo JSON y de los encabezados `Authorization` y
-    `X-Sesion-Subida`, que solo se puede probar con los endpoints reales. Si algo no se reenvía,
-    plan B de R1 (llamar directo a CloudFront con CORS en Spring).
+  - Verificado el 2026-11-17: Amplify reenvía Authorization a CloudFront (login y endpoints de
+    admin responden 200 por Amplify y por CloudFront).
 
 ### `boda-novios` (creada el 2026-11-17)
 - Repositorio `devdavco/boda-fotos`, rama `david/release`, monorepo con la carpeta `front-novios`
