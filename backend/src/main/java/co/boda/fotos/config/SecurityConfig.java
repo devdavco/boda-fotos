@@ -1,9 +1,11 @@
 package co.boda.fotos.config;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
+import co.boda.fotos.admin.BearerTokenFilter;
+import co.boda.fotos.admin.SesionAdminRepository;
 import co.boda.fotos.error.CodigoError;
+import co.boda.fotos.error.RespuestaJson;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -16,6 +18,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 /**
  * Reglas de acceso del API.
@@ -26,7 +29,7 @@ import org.springframework.security.web.SecurityFilterChain;
  *       su identidad es la sesión de subida del encabezado {@code X-Sesion-Subida}, que valida el
  *       servicio, no Spring Security.
  *   <li>{@code POST /api/admin/login} es público; el resto de {@code /api/admin/**} exige sesión
- *       de administrador. El filtro Bearer se agrega en T070; hasta entonces todo eso responde 401.
+ *       de administrador: {@link BearerTokenFilter} valida {@code Authorization: Bearer <token>}.
  *   <li>Cualquier otra ruta se niega.
  * </ul>
  *
@@ -37,8 +40,9 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, SesionAdminRepository sesionesAdmin) throws Exception {
         http
+            .addFilterBefore(new BearerTokenFilter(sesionesAdmin), AuthorizationFilter.class)
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .httpBasic(AbstractHttpConfigurer::disable)
@@ -70,16 +74,6 @@ public class SecurityConfig {
     private static void responder(HttpServletRequest req, HttpServletResponse res)
             throws IOException {
         boolean admin = req.getRequestURI().startsWith("/api/admin/");
-        CodigoError codigo = admin ? CodigoError.NO_AUTENTICADO : CodigoError.NO_ENCONTRADO;
-        res.setStatus(codigo.estadoHttp());
-        res.setContentType("application/json");
-        res.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        res.getWriter()
-                .write("{\"codigo\":\"" + codigo.name() + "\",\"mensaje\":\""
-                        + escapar(codigo.mensaje()) + "\"}");
-    }
-
-    private static String escapar(String texto) {
-        return texto.replace("\\", "\\\\").replace("\"", "\\\"");
+        RespuestaJson.escribir(res, admin ? CodigoError.NO_AUTENTICADO : CodigoError.NO_ENCONTRADO);
     }
 }

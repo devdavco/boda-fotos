@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -20,6 +21,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
@@ -39,6 +41,8 @@ public class ArchivoRepository {
      * número fijo de decimales, el orden alfabético de {@code galeriaOrden} es el orden
      * cronológico (con {@code Instant.toString()} un instante sin milisegundos ordenaría mal).
      */
+    private static final String INDICE_GALERIA = "galeria-index";
+
     private static final DateTimeFormatter UTC_MILIS =
             new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
 
@@ -160,6 +164,92 @@ public class ArchivoRepository {
             }
             throw new ApiException(CodigoError.NO_ENCONTRADO);
         }
+    }
+
+    /**
+     * {@code COMPLETADO -> ELIMINADO} (FR-028): en una transacción de dos {@code Update} (sin
+     * {@code ConditionCheck}) marca el archivo, le quita {@code galeriaEvento} y {@code galeriaOrden}
+     * (sale del índice de la galería) y resta 1 a {@code archivosTotal} y a {@code fotos} o
+     * {@code videos}. {@code ultimaSubidaEn} no retrocede (research R5).
+     *
+     * @throws ApiException {@code NO_ENCONTRADO} si el archivo ya no está {@code COMPLETADO} (por
+     *     ejemplo, el otro novio acaba de eliminarlo)
+     */
+    public void eliminar(ArchivoMultimedia archivo, Instant eliminadoEn, String eliminadoPor) {
+        String contador = archivo.tipo() == FormatoArchivo.Tipo.FOTO ? "fotos" : "videos";
+
+        TransactWriteItem actualizarArchivo = TransactWriteItem.builder()
+                .update(Update.builder()
+                        .tableName(propiedades.tablas().fotos())
+                        .key(Map.of("photoId", AttributeValue.fromS(archivo.photoId())))
+                        .updateExpression("SET #estado = :eliminado, eliminadoEn = :en, eliminadoPor = :por"
+                                + " REMOVE galeriaEvento, galeriaOrden")
+                        .conditionExpression("#estado = :completado")
+                        .expressionAttributeNames(Map.of("#estado", "estado"))
+                        .expressionAttributeValues(Map.of(
+                                ":eliminado", AttributeValue.fromS(Estado.ELIMINADO.name()),
+                                ":completado", AttributeValue.fromS(Estado.COMPLETADO.name()),
+                                ":en", AttributeValue.fromS(UTC_MILIS.format(eliminadoEn)),
+                                ":por", AttributeValue.fromS(eliminadoPor)))
+                        .build())
+                .build();
+        TransactWriteItem actualizarEvento = TransactWriteItem.builder()
+                .update(Update.builder()
+                        .tableName(propiedades.tablas().evento())
+                        .key(Map.of("eventoId", AttributeValue.fromS(archivo.eventoId())))
+                        .updateExpression("ADD archivosTotal :menosUno, " + contador + " :menosUno")
+                        .conditionExpression("attribute_exists(eventoId)")
+                        .expressionAttributeValues(Map.of(":menosUno", AttributeValue.fromN("-1")))
+                        .build())
+                .build();
+
+        try {
+            dynamo.transactWriteItems(TransactWriteItemsRequest.builder()
+                    .transactItems(actualizarArchivo, actualizarEvento)
+                    .build());
+        } catch (TransactionCanceledException e) {
+            // Atómica: si se canceló no se restó nada. Si el archivo sigue COMPLETADO, falló por
+            // otra causa (por ejemplo, el ítem del evento no existe).
+            Optional<ArchivoMultimedia> actual = buscar(archivo.photoId());
+            if (actual.isPresent() && actual.get().estado() == Estado.COMPLETADO) {
+                throw e;
+            }
+            throw new ApiException(CodigoError.NO_ENCONTRADO);
+        }
+    }
+
+    /** Una página de la galería y el {@code galeriaOrden} desde el que sigue, o nulo si no hay más. */
+    public record PaginaGaleria(List<ArchivoMultimedia> archivos, String siguienteOrden) {
+    }
+
+    /**
+     * Archivos {@code COMPLETADO} del evento, del más reciente al más antiguo (FR-026): {@code Query}
+     * sobre {@code galeria-index} con {@code ScanIndexForward=false}, sin {@code Scan}.
+     *
+     * <p>Pide {@code limite + 1} elementos para saber si hay otra página sin que la última página
+     * llena devuelva un cursor que lleva a una página vacía.
+     *
+     * @param desdeOrden {@code galeriaOrden} del último elemento de la página anterior, o nulo
+     */
+    public PaginaGaleria galeria(String desdeOrden, int limite) {
+        QueryRequest.Builder consulta = QueryRequest.builder()
+                .tableName(propiedades.tablas().fotos())
+                .indexName(INDICE_GALERIA)
+                .keyConditionExpression("galeriaEvento = :evento")
+                .expressionAttributeValues(Map.of(":evento", AttributeValue.fromS(propiedades.eventId())))
+                .scanIndexForward(false)
+                .limit(limite + 1);
+        if (desdeOrden != null) {
+            consulta.exclusiveStartKey(Map.of(
+                    "galeriaEvento", AttributeValue.fromS(propiedades.eventId()),
+                    "galeriaOrden", AttributeValue.fromS(desdeOrden),
+                    "photoId", AttributeValue.fromS(desdeOrden.substring(desdeOrden.indexOf('#') + 1))));
+        }
+        List<Map<String, AttributeValue>> items = dynamo.query(consulta.build()).items();
+        boolean hayMas = items.size() > limite;
+        List<Map<String, AttributeValue>> pagina = hayMas ? items.subList(0, limite) : items;
+        String siguiente = hayMas ? texto(pagina.get(limite - 1), "galeriaOrden") : null;
+        return new PaginaGaleria(pagina.stream().map(ArchivoRepository::desde).toList(), siguiente);
     }
 
     /** {@code PENDIENTE -> DESCARTADO}. No hace nada si el archivo ya no está pendiente. */

@@ -129,8 +129,12 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     menos), se dibuja el fotograma. Tiempo máximo 5 s; si falla o tarda, el video sube sin
     miniatura (FR-026a).
   - Foto: `createImageBitmap` + `<canvas>`, mismo tiempo máximo y misma regla de fallo.
-  - La miniatura sube con su propia URL prefirmada (`image/jpeg`, máximo 1 MB) después del
-    original. Como las URLs firman el tamaño (R2), el navegador genera la miniatura **antes** de
+  - La miniatura sube con su propia URL prefirmada (`image/jpeg`, máximo 1 MB) **justo después
+    de autorizar, antes del original** (ajuste del 2026-11-14 al implementar T056; antes decía
+    "después del original"). Su URL dura 5 minutos y no se puede renovar (`POST .../url` no la
+    incluye), y un video grande por 4G tarda más que eso en subir: después del original la
+    miniatura fallaría justo en los archivos que más la necesitan. Si el original nunca llega, el
+    backend borra la miniatura al descartar o rechazar el archivo, así que no quedan huérfanas. Como las URLs firman el tamaño (R2), el navegador genera la miniatura **antes** de
     autorizar y envía su tamaño en `tamanoMiniatura`. No cuenta para el tope de 300 archivos; sus bytes no se suman al tope de 5 GB.
 - **Rationale**: la spec (FR-026 y la suposición "la única miniatura derivada es la del video")
   implica que la galería muestre las fotos con el **original** como miniatura. Una foto de celular
@@ -159,6 +163,18 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   misma transacción (`TransactWriteItems`) que completa o elimina un archivo. Reflejan los archivos
   visibles en la galería (completados no eliminados). La hora de la última subida no retrocede al
   eliminar.
+- **Ajustes de la implementación** (2026-11-14, T072 y T085):
+  - **Cursor de la galería = `galeriaOrden` en Base64URL.** Como `galeriaOrden =
+    <subidoEn>#<photoId>`, con él se reconstruye la clave completa del índice
+    (`galeriaEvento`, `galeriaOrden`, `photoId`) sin exponer nada más. El backend rechaza con
+    `PETICION_INVALIDA` un cursor que no tenga esa forma.
+  - **Se piden `limite + 1` elementos.** Si llegan más de `limite`, hay otra página; si no,
+    `siguienteCursor` es `null`. Así la última página llena no devuelve un cursor que lleve a una
+    página vacía (lo que pasaría usando `LastEvaluatedKey`).
+  - **Eliminar: primero S3, después la transacción.** Si algo falla a mitad de camino, repetir la
+    petición lo resuelve: borrar un objeto que ya no existe no es un error y la transacción solo
+    resta una vez. En el orden inverso, un fallo dejaría el original en S3 aunque el archivo ya no
+    apareciera en la galería.
 
 ## R6. Autenticación de los novios
 
@@ -188,6 +204,28 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
     `Set-Cookie` y exige protección CSRF. El riesgo de XSS es bajo: Angular escapa la
     interpolación y no se renderiza HTML de terceros. Descartado por plazo.
   - Argon2id: descartado por la dependencia extra; la constitución acepta bcrypt.
+- **Ajustes de la implementación** (2026-11-14, T068; decisiones tomadas al implementar, no
+  estaban en la spec):
+  - **Tiempo de respuesta igual en todos los fallos.** Con la cuenta bloqueada, o con una
+    contraseña que bcrypt no acepta (vacía o de más de 72 bytes), no se compara contra el hash
+    real (se cumple "responde sin comprobar la contraseña"), pero sí contra el hash ficticio. Sin
+    eso, esos casos respondían en ~30 ms frente a ~500 ms de un usuario inexistente, y el tiempo
+    delataba que la cuenta existe (FR-025).
+  - **Contraseñas de más de 72 bytes cuentan como fallo.** bcrypt solo usa los primeros 72 bytes y
+    Spring Security 7 lanza una excepción con contraseñas más largas; se tratan como contraseña
+    incorrecta (suman un intento) en vez de responder 500.
+  - **Al bloquear, `intentosFallidos` vuelve a 0.** Cuando pasan los 15 minutos hay otros 5
+    intentos. Sin el reinicio, el primer fallo después del bloqueo volvería a bloquear la cuenta.
+  - **Los fallos se suman con `ADD` atómico** (`ReturnValues=UPDATED_NEW`): dos intentos
+    simultáneos cuentan dos. Todos los `UpdateItem` sobre `boda-admins` llevan
+    `attribute_exists(usuario)`, para que un login con un usuario inexistente no cree un ítem.
+  - **Usuario sin distinción de mayúsculas ni espacios**: se recorta y se pasa a minúsculas antes
+    de buscarlo (las cuentas están en minúsculas, data-model.md §3).
+  - **Riesgos aceptados** (revisión de código del 2026-11-14): con muchos intentos simultáneos, los
+    que leyeron la cuenta antes de que se escriba el bloqueo se comparan contra el hash real, así
+    que el tope de 5 se puede superar en ráfagas; bcrypt de costo 12 limita el ritmo. Y un usuario
+    existente con contraseña mala tarda 10–30 ms más (las escrituras del contador), lo que delata
+    que existe; los nombres de usuario (`mara`, `daniel`) no son secretos.
 
 ## R7. Cuentas de administrador (FR-031)
 
@@ -201,6 +239,14 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
 - **Alternatives considered**: endpoint de "bootstrap" protegido por un secreto (superficie de
   ataque innecesaria); ejecutar el comando en la instancia por Session Manager (exige ampliar el
   rol). Descartados.
+- **Ajustes de la implementación** (2026-11-14, T071):
+  - **Mínimo de 10 caracteres y máximo de 72 bytes.** La spec no fija una política de
+    contraseñas; 10 caracteres es un mínimo razonable para cuentas que dan acceso a todo el
+    material, y 72 bytes es el límite de bcrypt (R6). El comando rechaza lo que no cumple y no
+    imprime hash.
+  - **Exige una terminal real** (`System.console().isTerminal()`). Desde Java 22
+    `System.console()` existe aunque la entrada esté redirigida; así la contraseña nunca viene de
+    un archivo ni de una tubería, ni queda en el historial del shell.
 
 ## R8. Sesión de subida de invitados (FR-004a, FR-012a)
 

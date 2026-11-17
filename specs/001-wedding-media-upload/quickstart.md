@@ -18,6 +18,10 @@ manual** que exige la constitución. Se ejecuta completa en producción antes de
 
 ## 2. Desarrollo local
 
+> **Sin AWS**: [`local/README.md`](../../local/README.md) levanta todo en el equipo con DynamoDB
+> Local y un S3 falso en Docker (scripts de PowerShell en `local/`). Es la forma recomendada para
+> desarrollar y revisar la interfaz. Lo de abajo usa las tablas y el bucket reales.
+
 Para no tocar el evento real, el backend local usa un evento de prueba `boda-prueba` en las mismas
 tablas y el mismo bucket. Crear su ítem en `boda-evento` (igual que el de `boda-2026` del plan, con
 la ventana abierta hoy).
