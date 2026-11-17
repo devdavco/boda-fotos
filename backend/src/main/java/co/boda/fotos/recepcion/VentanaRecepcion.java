@@ -1,6 +1,7 @@
 package co.boda.fotos.recepcion;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -35,9 +36,26 @@ public class VentanaRecepcion {
         this.reloj = reloj;
     }
 
+    /**
+     * Estado de la ventana tal como lo ve {@code GET /api/recepcion/estado}. {@code cierreEn} es
+     * el cierre efectivo (el anticipado si existe y es anterior al programado).
+     */
+    public record Consulta(EstadoRecepcion estado, Instant aperturaEn, Instant cierreEn, Instant ahora) {
+    }
+
     /** Estado actual, con una lectura fresca del ítem del evento. */
     public EstadoRecepcion estado() {
         return calcular(eventos.obtener(), reloj.instant());
+    }
+
+    /**
+     * Estado y fechas de la ventana con una sola lectura fresca del ítem del evento y un solo
+     * instante del reloj, con la misma regla que {@link #requireAbierta()}.
+     */
+    public Consulta consultar() {
+        Evento evento = eventos.obtener();
+        Instant ahora = reloj.instant();
+        return new Consulta(calcular(evento, ahora), apertura(evento), cierreEfectivo(evento), ahora);
     }
 
     /**
@@ -63,12 +81,24 @@ public class VentanaRecepcion {
         return periodoTerminado(eventos.obtener(), reloj.instant());
     }
 
+    /**
+     * Vigencia de una URL de subida (FR-015): {@code min(maxima, cierre efectivo − ahora)}. Así
+     * ninguna URL sirve después del cierre, ni del programado ni del anticipado. Puede ser cero o
+     * negativa si el cierre ya pasó; quien llama ya exigió la recepción abierta con
+     * {@link #requireAbierta()}, y {@code AlmacenamientoS3} nunca firma menos de 1 segundo.
+     */
+    public static Duration vigenciaUrl(Evento evento, Instant ahora, Duration maxima) {
+        Duration hastaCierre = Duration.between(ahora, cierreEfectivo(evento));
+        return hastaCierre.compareTo(maxima) < 0 ? hastaCierre : maxima;
+    }
+
     /** Instante actual del reloj del servicio (UTC). */
     public Instant ahora() {
         return reloj.instant();
     }
 
-    static EstadoRecepcion calcular(Evento evento, Instant ahora) {
+    /** Estado de la ventana para un evento ya leído (por ejemplo, el resumen de los novios). */
+    public static EstadoRecepcion calcular(Evento evento, Instant ahora) {
         if (ahora.isBefore(apertura(evento))) {
             return EstadoRecepcion.NO_INICIADA;
         }
@@ -78,8 +108,13 @@ public class VentanaRecepcion {
         return EstadoRecepcion.ABIERTA;
     }
 
-    static boolean periodoTerminado(Evento evento, Instant ahora) {
-        return ahora.isAfter(aInstante(evento.disponibleHastaLocal()));
+    public static boolean periodoTerminado(Evento evento, Instant ahora) {
+        return ahora.isAfter(disponibleHasta(evento));
+    }
+
+    /** Fin del periodo para ver y descargar (FR-032), en UTC. */
+    public static Instant disponibleHasta(Evento evento) {
+        return aInstante(evento.disponibleHastaLocal());
     }
 
     public static Instant apertura(Evento evento) {

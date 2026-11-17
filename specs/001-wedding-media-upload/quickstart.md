@@ -18,6 +18,10 @@ manual** que exige la constitución. Se ejecuta completa en producción antes de
 
 ## 2. Desarrollo local
 
+> **Sin AWS**: [`local/README.md`](../../local/README.md) levanta todo en el equipo con DynamoDB
+> Local y un S3 falso en Docker (scripts de PowerShell en `local/`). Es la forma recomendada para
+> desarrollar y revisar la interfaz. Lo de abajo usa las tablas y el bucket reales.
+
 Para no tocar el evento real, el backend local usa un evento de prueba `boda-prueba` en las mismas
 tablas y el mismo bucket. Crear su ítem en `boda-evento` (igual que el de `boda-2026` del plan, con
 la ventana abierta hoy).
@@ -73,6 +77,8 @@ Hacerla el **2026-11-17 o el 2026-11-18**. Como la recepción real abre el 19, d
 se abre la ventana a mano y después se restaura.
 
 **4.0 Preparación**
+- [ ] En todas las pruebas de esta lista escribir un nombre de invitado que empiece por `Prueba`
+      (por ejemplo `Prueba iPhone`): así `limpiar-pruebas.sh` las encuentra en §4.9.
 
 - [ ] En `boda-evento` → ítem `boda-2026`, anotar los valores actuales y cambiar `aperturaLocal`
       a una hora ya pasada de hoy y `cierreLocal` a dentro de 3 horas.
@@ -83,6 +89,11 @@ se abre la ventana a mano y después se restaura.
 - [ ] iPhone/Safari, datos móviles: escanear el QR impreso, escribir el nombre, subir 5 fotos y
       1 video < 100 MB. Cada archivo muestra progreso y "Listo". La primera foto sube en menos de
       1 minuto desde el escaneo.
+      *Resultado parcial (2026-11-14, producción, iPhone/Safari, 4G, nombre `Prueba…`)*: 3 fotos
+      (hasta 10 MB) y 1 video `.mov` de 17 MB quedaron `COMPLETADO` con sus originales en S3 y los
+      contadores del evento en `archivosTotal=4`, `fotos=3`, `videos=1`. Sin miniaturas porque
+      falta T055. Faltan: las 5 fotos de la lista, medir la primera foto en menos de 1 minuto y
+      repetir en Android.
 - [ ] iPhone/Safari, **foto HEIC real** tomada con la cámara (formato "Alta eficiencia"): el
       archivo llega como `.jpeg` con tipo `image/jpeg` (el `accept` del selector no incluye
       `image/heic`, research R13), se genera la miniatura y la galería de los novios la muestra.
@@ -97,6 +108,10 @@ se abre la ventana a mano y después se restaura.
 
 - [ ] Empezar a subir 4 archivos y activar el modo avión a mitad. Al volver la señal, "Reintentar
       fallidos" reenvía solo los que no terminaron; los terminados no se repiten.
+      *Resultado parcial (2026-11-14, producción, iPhone/Safari, 4G)*: con el modo avión activado
+      a mitad de la subida del video `.mov` de 17 MB (`PUT` simple), el reintento terminó y el
+      archivo quedó `COMPLETADO`. Falta la variante con 4 archivos y comprobar que los ya
+      terminados no se reenvían. Los dos casos de video ≥ 100 MB (multipart) dependen de T054.
 - [ ] Video ≥ 100 MB: cortar la red a mitad y reintentar. Continúa desde las partes que faltaban
       (el progreso no vuelve a 0).
 - [ ] Video ≥ 100 MB: activar el modo avión **más de 5 minutos** a mitad de la subida y volver a
@@ -115,6 +130,12 @@ se abre la ventana a mano y después se restaura.
 
 **4.4 Ventana de recepción** (US2, US4-2, SC-005)
 
+- [ ] **El estado sigue a DynamoDB**: con la ventana abierta, `curl -s .../api/recepcion/estado`
+      responde `ABIERTA`. Cambiar `aperturaLocal` al futuro en la consola y repetir el `curl` sin
+      reiniciar nada: responde `NO_INICIADA` con `aperturaEn` igual a ese valor en UTC. Luego
+      `cierreLocal` al pasado → `CERRADA`; restaurar y poner `cierreAnticipadoEn` → `CERRADA` con
+      `cierreEn` igual al anticipado. En cada cambio, `POST /api/sesiones-subida` debe coincidir
+      con el estado (201 solo con `ABIERTA`). Probar también por el dominio de Amplify.
 - [ ] **Antes de la apertura**: poner `aperturaLocal` en el futuro → la página dice que la
       recepción aún no abre, con la fecha, y el `curl` de 4.3 responde `403 RECEPCION_NO_INICIADA`.
 - [ ] **Después del cierre**: poner `cierreLocal` en el pasado → la página dice "ya cerró" y el
@@ -166,7 +187,20 @@ se abre la ventana a mano y después se restaura.
 - [ ] Ítem `boda-2026` con los valores reales: `aperturaLocal = 2026-11-19T00:00`,
       `cierreLocal = 2026-11-22T12:00`, `disponibleHastaLocal = 2026-12-01T23:59:59`, topes
       `300` / `5368709120`, sin `cierreAnticipado*`.
-- [ ] Eliminar desde la galería **todos los archivos de prueba**; el contador queda en 0.
+- [ ] Limpiar **todas las pruebas** desde CloudShell con `infra/scripts/limpiar-pruebas.sh`
+      (descarga y uso en `infra/README.md`, §15), con el prefijo del nombre usado en las pruebas
+      (las de T052 usan `Prueba`). Primero `./limpiar-pruebas.sh Prueba`, que solo lista; revisar
+      que todo lo listado sea de prueba y correr `./limpiar-pruebas.sh --ejecutar Prueba`. Borra
+      archivos en S3 y en `boda-fotos`, multipart pendientes y sesiones, y recalcula los contadores
+      de `boda-2026` desde los archivos `COMPLETADO` que quedan. El resumen debe mostrar
+      `archivosTotal=0  fotos=0  videos=0`, la galería de los novios queda vacía y repetir el
+      comando con el mismo prefijo falla con "No hay sesiones…" (código 3). Si un archivo de prueba
+      no empieza por ese prefijo, el script lo avisa y no lo borra; borrarlo desde la galería.
+      *Resultado (2026-11-14)*: la limpieza de la prueba de T053 se hizo con el script y la
+      ventana se restauró. La primera corrida con `--ejecutar` borró los objetos de S3 pero se
+      detuvo con "S3 no pudo borrar  objeto(s)." porque `delete-objects` con `Quiet=true` no
+      imprime nada cuando todo sale bien y el script lo tomó como error; corregido en
+      `borrar_objetos` y probado con un `aws` simulado.
 - [ ] La página de invitados muestra "abre el jueves 19 de noviembre".
 - [ ] Quitar `http://localhost:4200` del CORS del bucket; activar PITR en las tablas.
 - [ ] Imprimir o validar el QR con la URL definitiva de Amplify (`https://david-release.d2x2ckep95pz3x.amplifyapp.com`).

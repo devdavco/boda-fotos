@@ -2,12 +2,16 @@ import { Injectable, InjectionToken, computed, inject, signal } from '@angular/c
 import {
   Api,
   ApiError,
+  Autorizacion,
   AutorizacionSimple,
   MENSAJE_SIN_CONEXION,
+  ParteCompletada,
   PeticionAutorizar,
 } from '../api/api';
+import { generarMiniatura } from './miniatura';
+import { ErrorMultipart, EstadoMultipart, enviarParteXhr, subirPartes } from './multipart';
 import { Sesion } from './sesion';
-import { Clasificacion, Formato, UMBRAL_MULTIPART_BYTES, clasificar } from './tipos';
+import { Clasificacion, Formato, clasificar } from './tipos';
 
 /** Archivos que se suben a la vez (research R13). */
 export const MAX_PARALELO = 3;
@@ -20,20 +24,18 @@ const TIEMPO_MINIATURA_MS = 5000;
 const ESPERAS_COMPLETAR_MS = [1000, 2000, 4000];
 
 const MENSAJE_PUT_FALLIDO = 'No se pudo enviar el archivo. Inténtalo de nuevo.';
-const MENSAJE_VIDEO_GRANDE =
-  'Este video pesa 100 MB o más y por ahora no se puede subir desde esta página. Elige uno más corto.';
 
 /**
  * Genera la miniatura JPEG de un archivo, o `null` si no puede. Se llama **antes** de autorizar: la
  * URL de la miniatura firma su tamaño (research R2 y R4), así que el tamaño debe conocerse al pedir
- * la autorización. La implementación real es `miniatura.ts` (T055); mientras no exista, los
- * archivos suben sin miniatura.
+ * la autorización. La implementación es `miniatura.ts` (T055); es un token para poder
+ * reemplazarla en pruebas.
  */
 export type Miniaturizador = (archivo: File, formato: Formato) => Promise<Blob | null>;
 
 export const MINIATURIZADOR = new InjectionToken<Miniaturizador>('MINIATURIZADOR', {
   providedIn: 'root',
-  factory: () => async () => null,
+  factory: () => generarMiniatura,
 });
 
 export type EstadoItem = 'EN_COLA' | 'SUBIENDO' | 'LISTO' | 'FALLO' | 'RECHAZADO';
@@ -69,6 +71,10 @@ export class ItemSubida {
   miniaturaSubida = false;
   /** El original ya está en S3 y falta completar. */
   originalSubido = false;
+  /** Solo videos de 100 MB o más: partes ya subidas y sus `ETag`, que sobreviven a un reintento. */
+  multipart: EstadoMultipart | null = null;
+  /** Partes para `completar` (multipart), en orden. */
+  partes: ParteCompletada[] | null = null;
 
   constructor(
     readonly archivo: File,
@@ -84,11 +90,6 @@ class ErrorDeItem extends Error {
   ) {
     super(mensajeFinal);
   }
-}
-
-/** Video que se subiría en partes (T054, pendiente): por ahora se rechaza antes de pedir el tope. */
-function requiereMultipart(c: Clasificacion, tamano: number): boolean {
-  return c.ok && c.tipo === 'VIDEO' && tamano >= UMBRAL_MULTIPART_BYTES;
 }
 
 /**
@@ -158,8 +159,6 @@ export class ColaSubida {
       const item = new ItemSubida(archivo, nombreInvitado, clasificacion);
       if (!clasificacion.ok) {
         this.rechazar(item, clasificacion.mensaje);
-      } else if (requiereMultipart(clasificacion, archivo.size)) {
-        this.rechazar(item, MENSAJE_VIDEO_GRANDE);
       }
       return item;
     });
@@ -167,12 +166,15 @@ export class ColaSubida {
     this.avanzar();
   }
 
-  /** Vuelve a poner en cola solo los fallidos. Los rechazados por regla no se reintentan. */
+  /**
+   * Vuelve a poner en cola solo los fallidos. Los rechazados por regla no se reintentan. Un video
+   * en partes sigue desde las que faltaban, así que su progreso no vuelve a 0.
+   */
   reintentarFallidos(): void {
     for (const item of this.items()) {
       if (item.estado() !== 'FALLO') continue;
       item.mensaje.set('');
-      item.progreso.set(0);
+      if (item.multipart === null) item.progreso.set(0);
       item.estado.set('EN_COLA');
     }
     this.avanzar();
@@ -217,31 +219,45 @@ export class ColaSubida {
 
   private async subir(item: ItemSubida): Promise<void> {
     if (!item.originalSubido) {
-      let autorizacion: AutorizacionSimple | null = null;
-      if (item.archivoId !== null) {
-        autorizacion = await this.pedirUrlNueva(item);
+      // Un multipart ya autorizado sigue con sus partes; si no, se autoriza o se pide URL nueva.
+      if (item.multipart === null) {
+        let autorizacion: Autorizacion | null = null;
+        if (item.archivoId !== null) {
+          autorizacion = await this.pedirUrlNueva(item);
+        }
+        if (autorizacion === null) {
+          autorizacion = await this.autorizar(item);
+        }
+        // La miniatura sube enseguida, antes del original: su URL dura 5 minutos y no se puede
+        // renovar, y un video grande por 4G tarda más que eso (research R4). Si el original no
+        // llega, el backend la borra al descartar el archivo.
+        if (autorizacion.urlMiniatura && item.miniatura && !item.miniaturaSubida) {
+          item.miniaturaSubida = await this.enviarMiniatura(autorizacion.urlMiniatura, item.miniatura);
+        }
+        if (autorizacion.modo === 'SIMPLE') {
+          await this.enviarOriginal(item, autorizacion);
+        } else {
+          item.multipart = {
+            archivoId: autorizacion.archivoId,
+            numeroPartes: autorizacion.numeroPartes,
+            tamanoParte: autorizacion.tamanoParte,
+            etags: new Map(),
+          };
+        }
       }
-      if (autorizacion === null) {
-        autorizacion = await this.autorizar(item);
+      if (item.multipart !== null) {
+        item.partes = await this.enviarPartes(item, item.multipart);
       }
-      await this.enviarOriginal(item, autorizacion);
       item.originalSubido = true;
-      if (autorizacion.urlMiniatura && item.miniatura) {
-        item.miniaturaSubida = await this.enviarMiniatura(
-          autorizacion.urlMiniatura,
-          item.miniatura,
-        );
-      }
     }
     await this.completar(item);
   }
 
   /**
-   * Genera la miniatura (antes de autorizar, para conocer su tamaño) y autoriza el archivo. Esta
-   * versión solo sube en modo simple: si el API respondiera multipart (T054, pendiente), se libera
-   * lo reservado y el archivo queda rechazado.
+   * Genera la miniatura (antes de autorizar, para conocer su tamaño) y autoriza el archivo. El
+   * servidor decide el modo: simple, o multipart para videos de 100 MB o más (T054).
    */
-  private async autorizar(item: ItemSubida): Promise<AutorizacionSimple> {
+  private async autorizar(item: ItemSubida): Promise<Autorizacion> {
     const clasificacion = item.clasificacion;
     if (!clasificacion.ok) throw new ErrorDeItem('RECHAZADO', clasificacion.mensaje);
     if (!item.miniaturaGenerada) {
@@ -262,13 +278,8 @@ export class ColaSubida {
       this.api.autorizar(peticion),
     );
     item.archivoId = respuesta.archivoId;
-    if (respuesta.modo === 'MULTIPART') {
-      // No debería llegar: los videos de 100 MB o más se rechazan antes de autorizar. Se libera lo
-      // que el servidor ya reservó.
-      await this.api.cancelar(respuesta.archivoId).catch(() => undefined);
-      item.archivoId = null;
-      throw new ErrorDeItem('RECHAZADO', MENSAJE_VIDEO_GRANDE);
-    }
+    // Archivo nuevo para el servidor: su miniatura todavía no está subida.
+    item.miniaturaSubida = false;
     return respuesta;
   }
 
@@ -334,7 +345,45 @@ export class ColaSubida {
     }
   }
 
-  /** La miniatura sube después del original y es opcional: cualquier falla solo la descarta. */
+  /**
+   * Sube las partes que faltan de un video (`multipart.ts`, T054). Las URLs de cada parte se piden
+   * justo antes de enviarla; una falla deja guardadas las partes ya subidas para el reintento.
+   */
+  private async enviarPartes(item: ItemSubida, estado: EstadoMultipart): Promise<ParteCompletada[]> {
+    try {
+      return await subirPartes(
+        item.archivo,
+        estado,
+        {
+          pedirUrls: (numeros) =>
+            this.sesion.conSesion(item.nombreInvitado, () =>
+              this.api.partes(estado.archivoId, numeros),
+            ),
+          enviarParte: enviarParteXhr,
+          esperar,
+        },
+        // Hasta que el servidor confirme, el avance no pasa de 99 %.
+        (porcentaje) => item.progreso.set(Math.min(porcentaje, 99)),
+      );
+    } catch (error) {
+      if (!(error instanceof ErrorMultipart)) throw error;
+      if (error.errorApi) {
+        if (error.errorApi.codigo === 'NO_ENCONTRADO') {
+          // El servidor ya no conoce este archivo (sesión renovada o descartado): un reintento
+          // manual lo autoriza de nuevo desde cero.
+          item.multipart = null;
+          item.archivoId = null;
+        }
+        throw error.errorApi;
+      }
+      throw new ErrorDeItem(
+        'FALLO',
+        error.causa === 'RED' ? MENSAJE_SIN_CONEXION : MENSAJE_PUT_FALLIDO,
+      );
+    }
+  }
+
+  /** La miniatura es opcional: cualquier falla solo la descarta (FR-026a). */
   private async enviarMiniatura(url: string, miniatura: Blob): Promise<boolean> {
     const estado = await enviarPut(url, { 'Content-Type': 'image/jpeg' }, miniatura);
     return estado >= 200 && estado < 300;
@@ -347,17 +396,30 @@ export class ColaSubida {
     for (let intento = 0; ; intento++) {
       try {
         await this.sesion.conSesion(item.nombreInvitado, () =>
-          this.api.completar(archivoId, { miniaturaSubida: item.miniaturaSubida }),
+          this.api.completar(archivoId, {
+            ...(item.partes !== null ? { partes: item.partes } : {}),
+            miniaturaSubida: item.miniaturaSubida,
+          }),
         );
         return;
       } catch (error) {
         if (error instanceof ApiError && error.codigo === 'SUBIDA_INCOMPLETA') {
-          // El objeto no está en S3: un reintento manual tiene que enviarlo otra vez.
+          // El objeto (o alguna parte) no está en S3: un reintento manual tiene que enviarlo otra
+          // vez. En multipart no se sabe qué parte falló, así que se reenvían todas.
           item.originalSubido = false;
+          if (item.multipart !== null) {
+            // Sin partes no se puede volver a completar: reintentar aquí daría 400. Queda como
+            // fallido y "Reintentar" vuelve a subir las partes.
+            item.multipart.etags.clear();
+            item.partes = null;
+            throw error;
+          }
         } else if (error instanceof ApiError && error.codigo === 'NO_ENCONTRADO') {
           // El servidor ya no conoce este archivo: un reintento manual tiene que autorizarlo de nuevo.
           item.originalSubido = false;
           item.archivoId = null;
+          item.multipart = null;
+          item.partes = null;
         }
         if (!esReintentableAlCompletar(error) || intento >= ESPERAS_COMPLETAR_MS.length) {
           throw error;

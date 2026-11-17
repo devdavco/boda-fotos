@@ -1,0 +1,60 @@
+<main class="archivo">
+  <a routerLink="/" class="volver">← Volver a la galería</a>
+
+  <div class="medio">
+    @switch (vista()) {
+      @case ('imagen') {
+        @if (falloVista()) {
+          <p class="sin-vista">{{ mensajeFalloVista }}</p>
+        } @else if (urlVer(); as url) {
+          <img
+            [src]="url"
+            [alt]="'Foto de ' + (elemento()?.nombreInvitado ?? 'un invitado')"
+            (error)="falloVista.set(true)"
+          />
+        } @else {
+          <p class="cargando" role="status">Cargando…</p>
+        }
+      }
+      @case ('video') {
+        @if (falloVista()) {
+          <p class="sin-vista">{{ mensajeFalloVista }}</p>
+        } @else if (urlVer(); as url) {
+          <video
+            [src]="url"
+            controls
+            playsinline
+            preload="metadata"
+            (error)="falloVista.set(true)"
+          ></video>
+        } @else {
+          <p class="cargando" role="status">Cargando…</p>
+        }
+      }
+      @case ('ninguna') {
+        <p class="sin-vista"><span aria-hidden="true">📷</span> {{ mensajeSinVista }}</p>
+      }
+      @default {
+        <p class="sin-vista">Abre la galería para ver este archivo, o descárgalo aquí.</p>
+      }
+    }
+  </div>
+
+  @if (elemento(); as e) {
+    <p class="datos">
+      <strong>{{ e.nombreInvitado }}</strong> · {{ fecha() }}<br />
+      <span class="nombre-original">{{ e.nombreOriginal }}</span>
+    </p>
+  }
+
+  @if (error(); as mensaje) {
+    <p class="error" role="alert">{{ mensaje }}</p>
+  }
+
+  <div class="acciones">
+    <button type="button" class="primario" [disabled]="ocupado()" (click)="descargar()">
+      Descargar original
+    </button>
+    <button type="button" class="peligro" [disabled]="ocupado()" (click)="eliminar()">Eliminar</button>
+  </div>
+</main>

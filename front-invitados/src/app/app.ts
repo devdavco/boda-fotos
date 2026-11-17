@@ -1,37 +1,30 @@
-import { Component, inject, signal } from '@angular/core';
-import { Api, EstadoRecepcion } from './api/api';
-import { Spike } from './spike';
+import { Component, inject } from '@angular/core';
+import { EstadoRecepcionService } from './estado/estado';
 import { Subida } from './subida/subida';
 
 /**
  * Página única de los invitados (FR-001). Al abrir consulta `GET /api/recepcion/estado` con una
  * ruta relativa (en producción la reenvía el rewrite de Amplify; en desarrollo, `proxy.conf.json`)
  * y solo muestra la pantalla de subida si la recepción está abierta; antes de abrir y después de
- * cerrar muestra el aviso de `contracts/ui.md`, sin selector de archivos.
+ * cerrar muestra el aviso de `contracts/ui.md`, sin selector de archivos. Si la recepción cierra
+ * mientras hay subidas en curso, `EstadoRecepcionService` cambia el estado y aparece el aviso (T062).
  */
 @Component({
   selector: 'app-root',
-  imports: [Spike, Subida],
+  imports: [Subida],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
-  private readonly api = inject(Api);
-  protected readonly estado = signal<EstadoRecepcion['estado'] | null>(null);
-  protected readonly error = signal<string | null>(null);
-  /** Pantalla temporal del spike de R2: solo con `#spike` en la URL (se elimina en T094). */
-  protected readonly spike = location.hash === '#spike';
+  private readonly recepcion = inject(EstadoRecepcionService);
+  protected readonly estado = this.recepcion.estado;
+  protected readonly error = this.recepcion.error;
 
   constructor() {
     void this.consultar();
   }
 
-  protected async consultar(): Promise<void> {
-    this.error.set(null);
-    try {
-      this.estado.set((await this.api.estado()).estado);
-    } catch {
-      this.error.set('No se pudo consultar el estado. Inténtalo de nuevo en unos segundos.');
-    }
+  protected consultar(): Promise<void> {
+    return this.recepcion.consultar();
   }
 }

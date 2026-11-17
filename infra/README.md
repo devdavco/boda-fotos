@@ -608,6 +608,82 @@ artefactos (§13) y la v3 de la launch template es la versión por defecto (§6)
 - Después del evento (2026-12-02): eliminar el ASG y el ALB para apagar el cómputo (constitución,
   Principio V).
 
+## 15. Limpiar las pruebas antes del evento
+Script: `infra/scripts/limpiar-pruebas.sh`. Borra las pruebas hechas en producción
+(`quickstart.md` §4 y §4.9, tarea T102). Corre en **AWS CloudShell**, con el usuario de consola
+(administrador), no con el rol `boda-ec2-role`: la política v3 no tiene `dynamodb:Scan` ni
+`s3:ListBucket`, y el script necesita ambos. Solo usa bash, AWS CLI v2 y `jq`, que ya vienen en
+CloudShell.
+
+Recibe un prefijo del nombre del invitado (por ejemplo `Prueba`). Busca en `boda-sesiones` las
+sesiones de subida del evento cuyo último nombre empieza así y borra todo lo que cuelga de ellas:
+
+1. Las cargas multipart pendientes de esos archivos.
+2. Los objetos de S3 de esos archivos, original y miniatura, bajo `eventos/boda-2026/`. La
+   miniatura se borra aunque el ítem no la registre.
+3. Los ítems de esos archivos en `boda-fotos`, en cualquier estado.
+4. Recalcula `archivosTotal`, `fotos`, `videos` y `ultimaSubidaEn` del ítem `boda-2026` en
+   `boda-evento` a partir de los archivos `COMPLETADO` que quedan. No resta a mano. Si no queda
+   ninguno, los contadores quedan en 0 y `ultimaSubidaEn` se quita.
+5. Los ítems de esas sesiones en `boda-sesiones`. Es el último paso a propósito: las sesiones son
+   el vínculo para encontrar sus archivos, así que si algo falla a la mitad se puede repetir el
+   script con el mismo prefijo.
+
+### Bajar el script a CloudShell
+El repositorio es privado, así que CloudShell no puede descargarlo con un enlace público. Dos
+opciones:
+
+- **Subir el archivo** (la más simple): con el repositorio en la rama `david/001-impl` en tu
+  equipo, en CloudShell usar *Actions → Upload file* y elegir `infra/scripts/limpiar-pruebas.sh`.
+  Queda en `~/limpiar-pruebas.sh`. Después: `chmod +x limpiar-pruebas.sh`.
+- **Clonar el repositorio** con un token de GitHub de solo lectura (*fine-grained*, permiso
+  *Contents: Read-only* sobre `devdavco/boda-fotos`). No guardar el token en ningún archivo:
+  ```bash
+  git clone --branch david/001-impl --depth 1 https://github.com/devdavco/boda-fotos.git
+  # usuario: devdavco; contraseña: el token
+  cd boda-fotos && chmod +x infra/scripts/limpiar-pruebas.sh
+  ```
+  Para traer cambios posteriores: `git pull` dentro de `boda-fotos`.
+
+### Uso
+```bash
+./limpiar-pruebas.sh Prueba              # --dry-run por defecto: solo lista, no borra
+./limpiar-pruebas.sh --ejecutar Prueba   # borra de verdad
+./limpiar-pruebas.sh --help
+```
+- El prefijo distingue mayúsculas de minúsculas y no puede ser vacío. Si tiene espacios, va entre
+  comillas. `Prueba` encuentra `Prueba T052`.
+- Variables opcionales: `EVENT_ID` (por defecto `boda-2026`) y `S3_BUCKET` (por defecto
+  `boda-fotos-2026`). Con `EVENT_ID=boda-prueba` limpia el evento de prueba de T045, si su ítem
+  existe en `boda-evento`.
+- Siempre trabaja en `us-east-1`, aunque CloudShell esté abierto en otra región.
+- Códigos de salida: `0` bien; `1` error de AWS o inconsistencia; `2` uso incorrecto; `3` no hay
+  ninguna sesión que coincida con el prefijo (no hace nada en silencio).
+
+Procedimiento recomendado:
+1. Correr sin `--ejecutar` y revisar la lista de sesiones, archivos, objetos y los contadores que
+   quedarían. Los nombres que imprime deben ser todos de prueba.
+2. Correr con `--ejecutar`.
+3. Leer el resumen: sesiones, ítems y objetos borrados, multipart abortados y los contadores
+   finales. Si todo lo que había era de prueba, deben quedar en 0.
+
+Avisos del script que conviene leer:
+- Un archivo con un nombre que empieza por el prefijo pero cuya sesión **no** coincide (el
+  invitado cambió el nombre después) se avisa y **no** se borra.
+- Un archivo de una sesión que sí coincide, pero con otro nombre, **sí** se borra (se borra todo
+  lo de la sesión) y se avisa.
+
+Advertencias:
+- El borrado es definitivo. El bucket no tiene versionado. Las tablas `boda-fotos` y `boda-evento`
+  tienen PITR, que restaura a una tabla nueva, no sobre la existente.
+- Usarlo antes del 2026-11-19. Con la recepción abierta y público real, un prefijo demasiado
+  corto borraría fotos de invitados: por eso el modo por defecto solo simula.
+- Los contadores se escriben con una condición sobre el valor de `archivosTotal` que se leyó justo
+  antes. Si alguien sube o elimina un archivo mientras se recalcula, el script falla con un
+  mensaje; los archivos ya borrados no se restauran y basta repetir el comando.
+- No toca otros prefijos de S3. Para vaciar `eventos/boda-prueba/` (T102) usar
+  `aws s3 rm s3://boda-fotos-2026/eventos/boda-prueba/ --recursive`, con `--dryrun` primero.
+
 ## Pendientes
 - Reemplazar el `.jar` mínimo por el backend completo (§13) a medida que se implementa.
 - Activar las acciones de las alarmas cuando esté el backend completo (§12).

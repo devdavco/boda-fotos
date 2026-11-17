@@ -141,7 +141,7 @@ public class SubidaService {
             throw e;
         }
 
-        Duration vigencia = limites.urlSubida();
+        Duration vigencia = VentanaRecepcion.vigenciaUrl(evento, ahora, limites.urlSubida());
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("archivoId", archivoId);
         respuesta.put("modo", modo.name());
@@ -171,11 +171,12 @@ public class SubidaService {
     /** Nueva URL para reintentar un archivo simple ya autorizado. No suma al tope (FR-007). */
     public Map<String, Object> nuevaUrl(String token, String archivoId) {
         ArchivoMultimedia archivo = pendienteDeLaSesion(token, archivoId);
-        ventana.requireAbierta();
+        Evento evento = ventana.requireAbierta();
         if (archivo.modo() != Modo.SIMPLE) {
             throw new ApiException(CodigoError.PETICION_INVALIDA);
         }
-        Duration vigencia = propiedades.limites().urlSubida();
+        Instant ahora = ventana.ahora();
+        Duration vigencia = VentanaRecepcion.vigenciaUrl(evento, ahora, propiedades.limites().urlSubida());
         UrlSubida url =
                 almacenamiento.urlSubida(archivo.claveS3(), archivo.contentType(), archivo.tamano(), vigencia);
         Map<String, Object> respuesta = new LinkedHashMap<>();
@@ -183,7 +184,7 @@ public class SubidaService {
         respuesta.put("modo", archivo.modo().name());
         respuesta.put("url", url.url());
         respuesta.put("encabezados", url.encabezados());
-        respuesta.put("expiraEn", ventana.ahora().plus(vigencia).toString());
+        respuesta.put("expiraEn", ahora.plus(vigencia).toString());
         return respuesta;
     }
 
@@ -193,7 +194,7 @@ public class SubidaService {
      */
     public Map<String, Object> partes(String token, String archivoId, List<Integer> numeros) {
         ArchivoMultimedia archivo = pendienteDeLaSesion(token, archivoId);
-        ventana.requireAbierta();
+        Evento evento = ventana.requireAbierta();
         if (archivo.modo() != Modo.MULTIPART
                 || numeros == null
                 || numeros.isEmpty()
@@ -201,7 +202,8 @@ public class SubidaService {
                 || numeros.stream().anyMatch(n -> n == null || n < 1 || n > archivo.numeroPartes())) {
             throw new ApiException(CodigoError.PETICION_INVALIDA);
         }
-        Duration vigencia = propiedades.limites().urlSubida();
+        Instant ahora = ventana.ahora();
+        Duration vigencia = VentanaRecepcion.vigenciaUrl(evento, ahora, propiedades.limites().urlSubida());
         List<Map<String, Object>> urls = new ArrayList<>();
         for (int numero : new LinkedHashSet<>(numeros)) {
             Map<String, Object> parte = new LinkedHashMap<>();
@@ -218,7 +220,7 @@ public class SubidaService {
         }
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("urls", urls);
-        respuesta.put("expiraEn", ventana.ahora().plus(vigencia).toString());
+        respuesta.put("expiraEn", ahora.plus(vigencia).toString());
         return respuesta;
     }
 
@@ -227,7 +229,8 @@ public class SubidaService {
      * corresponde, verifica en S3 el tamaño, el tipo y la firma de bytes de lo que llegó y recién
      * entonces lo pasa a {@code COMPLETADO} (entra a la galería). Es idempotente.
      *
-     * @throws ApiException {@code SUBIDA_INCOMPLETA} (409, reintentable) si el objeto o alguna
+     * @throws ApiException {@code RECEPCION_CERRADA} si la recepción ya cerró, después de borrar lo
+     *     que haya llegado y descartar el archivo; {@code SUBIDA_INCOMPLETA} (409, reintentable) si el objeto o alguna
      *     parte no está en S3; {@code CONTENIDO_INCONSISTENTE} (422) si lo subido no coincide con
      *     lo autorizado, en cuyo caso se borra el objeto
      */
@@ -242,7 +245,17 @@ public class SubidaService {
         if (archivo.estado() != Estado.PENDIENTE) {
             throw new ApiException(CodigoError.NO_ENCONTRADO);
         }
-        ventana.requireAbierta();
+        try {
+            ventana.requireAbierta();
+        } catch (ApiException e) {
+            // Recepción cerrada (programada o anticipada): lo que llegó después del cierre no entra
+            // a la galería, en ninguno de los dos modos (FR-016, escenario 2 de la US4). Se borra el
+            // objeto o se aborta el multipart y el archivo queda DESCARTADO.
+            if (e.codigo() == CodigoError.RECEPCION_CERRADA) {
+                descartarSubida(archivo);
+            }
+            throw e;
+        }
 
         if (archivo.modo() == Modo.MULTIPART) {
             completarMultipart(archivo, peticion);
@@ -269,12 +282,20 @@ public class SubidaService {
      * (y su miniatura) y marca el archivo {@code DESCARTADO}. El cupo de la sesión no se devuelve.
      */
     public void cancelar(String token, String archivoId) {
-        ArchivoMultimedia archivo = pendienteDeLaSesion(token, archivoId);
+        descartarSubida(pendienteDeLaSesion(token, archivoId));
+    }
+
+    /**
+     * Quita lo que haya llegado de un archivo pendiente (aborta el multipart o borra el objeto, y la
+     * miniatura) y lo marca {@code DESCARTADO}. El cupo de la sesión no se devuelve (FR-012a).
+     */
+    private void descartarSubida(ArchivoMultimedia archivo) {
         if (archivo.modo() == Modo.MULTIPART) {
             almacenamiento.abortarMultipart(archivo.claveS3(), archivo.uploadId());
-        } else {
-            almacenamiento.borrar(archivo.claveS3());
         }
+        // También en multipart: si un completar anterior ya ensambló el objeto (y falló después,
+        // por ejemplo en la verificación), abortar no lo borra y quedaría huérfano en S3.
+        almacenamiento.borrar(archivo.claveS3());
         almacenamiento.borrar(almacenamiento.claveMiniatura(archivo.photoId()));
         archivos.descartar(archivo.photoId());
     }
