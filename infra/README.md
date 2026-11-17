@@ -460,13 +460,20 @@ mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones cr�
     `X-Sesion-Subida`, que solo se puede probar con los endpoints reales. Si algo no se reenvía,
     plan B de R1 (llamar directo a CloudFront con CORS en Spring).
 
-### `boda-novios` (pendiente)
-
-Igual que la anterior, con la carpeta `front-novios` (`AMPLIFY_MONOREPO_APP_ROOT=front-novios`) y
-sus propios rewrites. Se crea cuando exista `front-novios/` en `david/release`; con la carpeta
-ausente su primer build falla. Al crearla, anotar aquí su dominio. Su dominio **no** va en el CORS
-del bucket.
-
+### `boda-novios` (creada el 2026-11-17)
+- Repositorio `devdavco/boda-fotos`, rama `david/release`, monorepo con la carpeta `front-novios`
+  (`AMPLIFY_MONOREPO_APP_ROOT=front-novios`).
+- **Dominio: `https://david-release.d26973wksxbgd3.amplifyapp.com`**. Su dominio **no** va en el
+  CORS del bucket.
+- Rewrites: los mismos dos de `boda-invitados`, en el mismo orden (`/api/<*>` →
+  `https://ddl2si3h6lu7z.cloudfront.net/api/<*>` como 200 y la regla de SPA hacia `/index.html`).
+- El encabezado `Authorization` se reenvía por el rewrite (verificado el 2026-11-17; `research.md`
+  R1).
+- Primer build correcto tras el merge a `david/release` del 2026-11-17 (commit "Publicar API y
+  front de novios, multipart y miniaturas").
+- **Cuenta temporal `prueba-david`** (creada el 2026-11-17 para probar el login y el resumen).
+  **Borrarla antes del 19 de noviembre** (T076, T104); en el evento solo existen las cuentas de
+  Mara y Daniel.
 ## 12. Monitoreo (FR-030a)
 
 ### SNS `boda-alertas`
