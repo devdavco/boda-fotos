@@ -34,7 +34,7 @@ Los archivos nunca pasan por CloudFront, el ALB ni la EC2: van directo entre el 
 | Recurso | Nombre | Estado |
 | --- | --- | --- |
 | Bucket S3 de medios | `boda-fotos-2026` | Creado |
-| Bucket S3 de artefactos | `boda-artefactos-248033171214` | Creado (§13), con el `.jar` mínimo del backend |
+| Bucket S3 de artefactos | `boda-artefactos-248033171214` | Creado (§13), con el `.jar` del backend completo |
 | Tabla DynamoDB | `boda-fotos` | Creada, con el índice `galeria-index` y PITR (§3) |
 | Tablas DynamoDB | `boda-evento`, `boda-admins`, `boda-sesiones` | Creadas (§3) |
 | Ítem del evento | `boda-2026` en `boda-evento` | Creado (§3) |
@@ -47,14 +47,13 @@ Los archivos nunca pasan por CloudFront, el ALB ni la EC2: van directo entre el 
 | CloudFront | `boda-cf` | Creado |
 | Auto Scaling del backend | `boda-backend-asg` | Creado, 1/1/1 (§14) |
 | SNS | `boda-alertas` | Creado |
-| Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Creadas, acciones desactivadas |
+| Alarmas | `boda-backend-sin-salud`, `boda-api-errores-5xx` | Creadas, acciones activadas y probadas el 2026-11-17 (§12) |
 | Presupuesto | `boda-presupuesto` | Creado |
 | App de Amplify de invitados | `boda-invitados` | Creada, rama `david/release` (§11) |
-| App de Amplify de novios | `boda-novios` | Pendiente (hasta que exista `front-novios/`) |
+| App de Amplify de novios | `boda-novios` | Creada el 2026-11-17, rama `david/release` (§11) |
 
-El `.jar` que corre hoy es el **esqueleto del backend** (`/actuator/health` y un
-`GET /api/recepcion/estado` de respuesta fija). El backend completo lo reemplaza con el
-procedimiento de §13.
+El `.jar` que corre desde el 2026-11-17 es el **backend completo** (versión final, publicada con el
+procedimiento de §13).
 
 Valores que usan las aplicaciones:
 
@@ -112,15 +111,14 @@ Consola: S3 → Create bucket.
 
 Permissions → Cross-origin resource sharing. Solo la página de invitados sube desde el navegador a
 S3 con `PUT`; la galería de los novios muestra y descarga con `<img>`, `<video>` y enlaces directos,
-que no necesitan CORS, y por eso su dominio no se agrega. `http://localhost:4200` es para
-`ng serve` y se quita antes del 2026-11-19. Valor vigente desde el 2026-11-14:
+que no necesitan CORS, y por eso su dominio no se agrega. `http://localhost:4200` (para `ng serve`)
+se quitó el 2026-11-17. Valor vigente desde esa fecha:
 
 ```json
 [
   {
     "AllowedOrigins": [
-      "https://david-release.d2x2ckep95pz3x.amplifyapp.com",
-      "http://localhost:4200"
+      "https://david-release.d2x2ckep95pz3x.amplifyapp.com"
     ],
     "AllowedMethods": ["PUT"],
     "AllowedHeaders": ["*"],
@@ -470,9 +468,9 @@ mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones cr�
   R1).
 - Primer build correcto tras el merge a `david/release` del 2026-11-17 (commit "Publicar API y
   front de novios, multipart y miniaturas").
-- **Cuenta temporal `prueba-david`** (creada el 2026-11-17 para probar el login y el resumen).
-  **Borrarla antes del 19 de noviembre** (T076, T104); en el evento solo existen las cuentas de
-  Mara y Daniel.
+- **Cuenta `prueba-david`** (creada el 2026-11-17 para probar el login y el resumen). Se conserva
+  durante el evento por decisión de David (cuenta de soporte del responsable técnico). Las cuentas
+  de los novios son `mara` y `daniel`.
 ## 12. Monitoreo (FR-030a)
 
 ### SNS `boda-alertas`
@@ -482,8 +480,9 @@ mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones cr�
 
 ### Alarmas de CloudWatch
 
-Se crearon con las acciones desactivadas porque todavía no hay backend; sin él, la primera alarma
-se dispararía de inmediato. Variables comunes (CloudShell):
+Se crearon con las acciones desactivadas porque todavía no había backend; sin él, la primera alarma
+se habría disparado de inmediato. **Las acciones se activaron el 2026-11-17** (comando al final de
+esta sección). Variables comunes (CloudShell):
 
 ```bash
 LB_ARN=$(aws elbv2 describe-load-balancers --names boda-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text)
@@ -540,11 +539,15 @@ aws cloudwatch put-metric-alarm \
   --tags Key=proyecto,Value=boda
 ```
 
-Activar ambas cuando el backend esté desplegado y sano:
+Activadas el 2026-11-17, con el backend completo desplegado y sano:
 
 ```bash
 aws cloudwatch enable-alarm-actions --alarm-names boda-backend-sin-salud boda-api-errores-5xx
 ```
+
+Probadas el 2026-11-17: ambas alarmas (`boda-backend-sin-salud` y `boda-api-errores-5xx`) enviaron
+el correo de caída y el de recuperación, y el Auto Scaling group reemplazó la instancia en unos 7
+minutos.
 
 ## 13. Bucket de artefactos y despliegue del backend
 
@@ -691,10 +694,10 @@ Advertencias:
   `aws s3 rm s3://boda-fotos-2026/eventos/boda-prueba/ --recursive`, con `--dryrun` primero.
 
 ## Pendientes
-- Reemplazar el `.jar` mínimo por el backend completo (§13) a medida que se implementa.
-- Activar las acciones de las alarmas cuando esté el backend completo (§12).
-- Crear la app de Amplify `boda-novios` cuando exista `front-novios/` (§11).
-- Crear las cuentas `mara` y `daniel` en `boda-admins` (§3).
-- Antes del 2026-11-19: quitar `localhost` del CORS y ejecutar la lista de chequeo manual en
-  celulares reales.
-- Después del evento: apagar o eliminar el cómputo (Auto Scaling, ALB) según la constitución.
+
+- Crear las cuentas `mara` y `daniel` en `boda-admins` (§3; T074) y registrar aquí el procedimiento
+  de restablecer contraseña.
+- Generar el QR con el dominio definitivo de `boda-invitados` (T105).
+- Después del cierre del 22: revisar los archivos `PENDIENTE` de modo `SIMPLE` cuyo objeto exista
+  en S3 (T106).
+- El 2026-12-02 apagar el cómputo (Auto Scaling y ALB) según la constitución (T107).
