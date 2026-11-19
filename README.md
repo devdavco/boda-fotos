@@ -70,12 +70,12 @@ Todo el diseño está en [`specs/001-wedding-media-upload/`](specs/001-wedding-m
   [`data-model.md`](specs/001-wedding-media-upload/data-model.md) y
   [`contracts/`](specs/001-wedding-media-upload/contracts/)
 - [x] Tareas — [`tasks.md`](specs/001-wedding-media-upload/tasks.md) (107 tareas, un commit por tarea)
-- [ ] Implementación: **97 de 107 tareas hechas** (2026-11-18). El código de las cinco historias de
+- [ ] Implementación: **101 de 107 tareas hechas** (2026-11-18). El código de las cinco historias de
   usuario está completo: subida de invitados con multipart y miniaturas, ventana de recepción, API
   y front de novios, eliminación, cierre anticipado y fin del periodo, y está publicado en
-  producción. Faltan las cuentas de los novios, el QR, la prueba de Samsung Internet, la revisión
+  producción. Faltan el QR, la prueba de Samsung Internet, la revisión
   posterior al evento y el apagado del cómputo.
-- [ ] Lista de chequeo manual ejecutada en producción antes del 2026-11-19
+- [x] Lista de chequeo manual ejecutada en producción antes del 2026-11-19
   ([`quickstart.md`](specs/001-wedding-media-upload/quickstart.md) §4)
 
 ## Estructura del repositorio

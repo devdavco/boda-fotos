@@ -8,7 +8,7 @@ defecto.
 - Cuenta: `248033171214`
 - Región: `us-east-1` (todo, salvo lo que AWS maneja como global: IAM y CloudFront).
 - Tag obligatorio en todos los recursos: `proyecto=boda`.
-- Última actualización: 2026-11-14.
+- Última actualización: 2026-11-18.
 
 ## Arquitectura
 
@@ -80,12 +80,15 @@ Los recursos dependen unos de otros. Si hay que recrear todo, seguir este orden:
 8. ALB y su regla (§8)
 9. CloudFront (§9)
 10. Restringir el security group del ALB a CloudFront (§10)
-11. Subir el `.jar` al bucket de artefactos (§13); **antes** de la launch template y del ASG
+11. Subir el `.jar` del backend al bucket de artefactos (§13); **antes** de la launch template y del ASG
 12. Launch template (§6)
 13. Auto Scaling group (§14)
-14. App de Amplify de invitados (§11); **recrearla cambia el dominio del QR**
-15. CORS del bucket (§2; necesita el dominio de Amplify)
-16. SNS y alarmas (§12)
+14. Cuentas de los novios en `boda-admins` (§3; el hash se genera con el `.jar`)
+15. App de Amplify de invitados (§11); **recrearla cambia el dominio del QR**
+16. App de Amplify de novios (§11)
+17. CORS del bucket (§2; necesita el dominio de Amplify de invitados)
+18. SNS y alarmas, con sus acciones activadas (§12)
+19. Antes del evento, limpiar las pruebas (§15)
 ---
 
 ## 1. Seguridad de la cuenta y presupuesto
@@ -216,10 +219,34 @@ aws dynamodb put-item --table-name boda-evento \
 - El cierre anticipado agrega `cierreAnticipadoEn` (UTC) y `cierreAnticipadoPor`. Para probar y
   restaurar la ventana, ver `specs/001-wedding-media-upload/quickstart.md` §4.9.
 
-### Pendiente
+### Cuentas de los novios
 
-Las cuentas de los novios (`mara` y `daniel`) se crean en `boda-admins` cuando exista el comando
-`hash-contrasena` del backend; el procedimiento se agrega aquí entonces.
+Las cuentas `mara` y `daniel` se crearon el 2026-11-18 en `boda-admins`. Las contraseñas se
+entregaron a Mara y Daniel por un canal privado y nunca se escriben en el repositorio ni aquí. La
+cuenta `prueba-david` (de soporte) sigue activa durante el evento (§11).
+
+El hash bcrypt se genera en el equipo de quien administra, con el `.jar` construido (pide la
+contraseña sin eco):
+
+```bash
+java -jar backend/target/app.jar hash-contrasena
+```
+
+Crear una cuenta, desde CloudShell (repetir con `daniel` / `Daniel`):
+
+```bash
+aws dynamodb put-item --table-name boda-admins \
+  --condition-expression "attribute_not_exists(usuario)" \
+  --item '{"usuario":{"S":"mara"},"nombreVisible":{"S":"Mara"},"hashContrasena":{"S":"<hash>"},"intentosFallidos":{"N":"0"}}'
+```
+
+Restablecer la contraseña o desbloquear una cuenta (con un hash nuevo; quita también el bloqueo):
+
+```bash
+aws dynamodb update-item --table-name boda-admins --key '{"usuario":{"S":"mara"}}' \
+  --update-expression "SET hashContrasena = :h, intentosFallidos = :z REMOVE bloqueadaHasta" \
+  --expression-attribute-values '{":h":{"S":"<hash>"},":z":{"N":"0"}}'
+```
 
 ## 4. IAM
 
@@ -428,6 +455,12 @@ Dos apps desde este repositorio (`devdavco/boda-fotos`), una por front-end, con 
 push a la rama **`david/release`**. Se trabaja en ramas `david/...` y solo lo que está listo se
 mergea a `david/release`; del 19 al 22 de noviembre solo entran correcciones críticas (plan,
 "Ramas y despliegue de los front-ends"). El monorepo se construye con el `amplify.yml` de la raíz.
+
+**K7 (verificado el 2026-11-18):** cada push a `david/release` reconstruye las dos apps
+(`boda-invitados` y `boda-novios`), aunque solo cambie documentación. Por eso, **del 19 al 22 de
+noviembre el *auto build* de `boda-invitados` está desactivado**. Si hay que corregir algo de
+invitados en esas fechas, se lanza el build a mano desde la consola de Amplify (app `boda-invitados`,
+rama `david/release`) y después se vuelve a desactivar el *auto build*.
 
 ### `boda-invitados` (creada el 2026-11-14)
 
@@ -695,9 +728,8 @@ Advertencias:
 
 ## Pendientes
 
-- Crear las cuentas `mara` y `daniel` en `boda-admins` (§3; T074) y registrar aquí el procedimiento
-  de restablecer contraseña.
 - Generar el QR con el dominio definitivo de `boda-invitados` (T105).
 - Después del cierre del 22: revisar los archivos `PENDIENTE` de modo `SIMPLE` cuyo objeto exista
   en S3 (T106).
+- Reactivar el *auto build* de `boda-invitados` después del 22.
 - El 2026-12-02 apagar el cómputo (Auto Scaling y ALB) según la constitución (T107).
