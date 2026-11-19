@@ -32,6 +32,9 @@ de partida son la constitución v2.0.0 y la infraestructura ya creada en
   Amplify): `POST /api/sesiones-subida` con cuerpo JSON devuelve 201, `POST /api/subidas` con
   `X-Sesion-Subida` devuelve 201 y `DELETE /api/subidas/{id}` devuelve 204. El cuerpo, el
   encabezado y el método DELETE se reenvían bien. Plan B **no** necesario.
+- **Verificado el 2026-11-17** (T076, producción): el encabezado `Authorization` se reenvía por el
+  rewrite de Amplify. Un `GET` a la API de administración con una cuenta temporal respondió 200
+  por CloudFront y 200 por el dominio de Amplify de `boda-novios`. Plan B **no** necesario.
 ## R2. Cómo se transfieren los archivos
 
 - **Decision**: subida y descarga directas entre el navegador y el endpoint regional de S3
