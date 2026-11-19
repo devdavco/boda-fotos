@@ -1,0 +1,18 @@
+# Entorno 100 % local (local/README.md): DynamoDB Local y un S3 falso (Adobe S3Mock).
+# Nada de esto toca AWS. Los datos viven en memoria: `docker compose down` los borra.
+name: boda-local
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+
+  s3:
+    image: adobe/s3mock:latest
+    environment:
+      # El bucket se crea al arrancar. S3Mock responde CORS a cualquier origen y no valida firmas.
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: boda-fotos-local
+    ports:
+      - "9090:9090"

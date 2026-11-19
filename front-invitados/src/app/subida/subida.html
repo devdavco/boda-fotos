@@ -1,0 +1,82 @@
+<section class="subida">
+  <p class="aviso">
+    Las fotos y videos que subas solo los verán Mara y Daniel en su galería privada. No se publican
+    ni se comparten.
+  </p>
+
+  <div class="campo">
+    <label for="nombre">Tu nombre</label>
+    <input
+      #campoNombre
+      id="nombre"
+      type="text"
+      autocomplete="name"
+      [value]="nombre()"
+      (input)="escribirNombre($event)"
+      [attr.aria-invalid]="errorNombre()"
+      aria-describedby="error-nombre"
+    />
+    @if (errorNombre()) {
+      <p id="error-nombre" class="error" role="alert">{{ mensajeNombre }}</p>
+    }
+  </div>
+
+  <button type="button" class="elegir" (click)="elegir()">Elegir fotos y videos</button>
+  <input
+    #selector
+    class="oculto"
+    type="file"
+    multiple
+    accept="image/*,video/mp4,video/quicktime"
+    tabindex="-1"
+    aria-hidden="true"
+    (change)="alElegir($event)"
+  />
+
+  @if (cola.pendientes() > 0) {
+    <p class="espera" role="status">Mantén esta pantalla abierta hasta que terminen las subidas.</p>
+  }
+
+  @if (cola.items().length > 0) {
+    <ul class="lista">
+      @for (item of cola.items(); track item) {
+        <li
+          class="fila"
+          [class.fallo]="item.estado() === 'FALLO'"
+          [class.rechazado]="item.estado() === 'RECHAZADO'"
+        >
+          <span class="vista" aria-hidden="true">
+            @if (item.vistaPrevia(); as origen) {
+              <img [src]="origen" alt="" />
+            } @else {
+              {{ icono(item) }}
+            }
+          </span>
+          <span class="datos">
+            <span class="archivo">{{ item.archivo.name }}</span>
+            <span class="tamano">{{ tamano(item.archivo.size) }}</span>
+            @if (item.estado() !== 'RECHAZADO') {
+              <progress
+                max="100"
+                [value]="item.estado() === 'LISTO' ? 100 : item.progreso()"
+                [attr.aria-label]="'Avance de ' + item.archivo.name"
+              ></progress>
+            }
+            <span class="estado">{{ etiqueta(item) }}</span>
+          </span>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (cola.fallidos() > 0) {
+    <button type="button" class="reintentar" (click)="reintentar()">Reintentar fallidos</button>
+  }
+
+  @if (terminado()) {
+    <p class="listo" role="status">
+      ¡Listo! Subiste {{ cola.listos() }} {{ plural(cola.listos()) }}. Puedes elegir más cuando
+      quieras.
+    </p>
+  }
+</section>

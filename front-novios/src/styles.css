@@ -1,0 +1,79 @@
+/* Estilos comunes del front de novios. Mismos colores y tamaños que front-invitados. */
+:root {
+  --azul: #3b6fd4;
+  --rojo: #b3261e;
+  --gris: #5f6368;
+  --borde: #8a8f98;
+  --fondo-aviso: #eef4ff;
+}
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: #1f1f1f;
+  background: #fff;
+}
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+.campo {
+  display: grid;
+  gap: 0.25rem;
+}
+.campo label {
+  font-weight: 600;
+}
+.campo input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--borde);
+  border-radius: 0.5rem;
+}
+button,
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: var(--azul);
+  background: #fff;
+  border: 2px solid var(--azul);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.primario {
+  color: #fff;
+  background: var(--azul);
+}
+.peligro {
+  color: var(--rojo);
+  border-color: var(--rojo);
+}
+.error {
+  margin: 0;
+  color: var(--rojo);
+}
+.aviso {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--fondo-aviso);
+  border-left: 4px solid var(--azul);
+  border-radius: 0.25rem;
+}
